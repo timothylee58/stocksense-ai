@@ -1,0 +1,57 @@
+version: "3.9"
+
+services:
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: stocksense
+      POSTGRES_PASSWORD: stocksense_pass
+      POSTGRES_DB: stocksense
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - ALLOWED_ORIGINS=http://localhost:3000,http://frontend:3000
+      - REDIS_URL=redis://redis:6379
+      - DATABASE_URL=postgresql://stocksense:stocksense_pass@postgres:5432/stocksense
+      - SECRET_KEY=${SECRET_KEY:-change-me-in-production}
+    volumes:
+      - model_data:/app/models
+    depends_on:
+      - redis
+      - postgres
+
+  frontend:
+    build:
+      context: ./stocksense-ai/frontend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:8000
+    depends_on:
+      - backend
+
+volumes:
+  redis_data:
+  postgres_data:
+  model_data:

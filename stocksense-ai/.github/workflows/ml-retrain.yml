@@ -1,0 +1,30 @@
+name: Weekly ML Retraining
+on:
+  schedule:
+    - cron: '0 1 * * 1'   # Monday 9AM MYT (UTC+8 → 01:00 UTC)
+  workflow_dispatch:        # Allow manual trigger
+
+jobs:
+  retrain:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        ticker: [NVDA, "MAYBANK.KL", "PBBANK.KL"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.11' }
+      - name: Install dependencies
+        run: |
+          pip install torch==2.5.1 --index-url https://download.pytorch.org/whl/cpu -q
+          pip install -r stocksense-ai/backend/requirements.txt -q
+      - name: Retrain ${{ matrix.ticker }}
+        run: |
+          cd stocksense-ai/backend
+          python ml/scripts/train.py --ticker "${{ matrix.ticker }}" --days 365
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          MLFLOW_TRACKING_URI: ${{ secrets.MLFLOW_TRACKING_URI }}
+          REDIS_URL: ${{ secrets.REDIS_URL }}
+          SECRET_KEY: ${{ secrets.SECRET_KEY }}

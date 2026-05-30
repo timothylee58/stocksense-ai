@@ -1,0 +1,28 @@
+@import "tailwindcss";
+
+:root {
+  --background: #030d1a;
+  --foreground: #e2f0ff;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-mono: var(--font-geist-mono);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+}
+
+/* Smooth scrolling for anchor links */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Remove default outline, use custom focus styles */
+*:focus-visible {
+  outline: 1px solid rgba(0, 255, 200, 0.6);
+  outline-offset: 2px;
+}

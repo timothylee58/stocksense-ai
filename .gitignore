@@ -1,0 +1,67 @@
+# Python
+__pycache__/
+**/__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+venv/
+.venv/
+env/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+
+# ML artifacts
+*.pkl
+*.joblib
+*.pt
+*.pth
+**/models/*.pkl
+**/models/*.pt
+**/models/*.pth
+**/models/*.json
+mlruns/
+mlflow.db
+stocksense.db
+
+# Node
+**/node_modules/
+**/.next/
+**/out/
+**/.vercel/
+*.tsbuildinfo
+
+# Environment — NEVER commit
+.env
+.env.local
+.env.*.local
+!**/.env.example
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# Logs
+*.log
+logs/
+
+# AI tool skill directories
+.agent/
+.agents/
+.claude/
+.codebuddy/
+.codex/
+.continue/
+.cursor/
+.gemini/
+.kiro/
+.opencode/
+.qoder/
+.roo/
+.trae/
+.windsurf/

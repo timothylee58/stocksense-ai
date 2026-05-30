@@ -1,0 +1,58 @@
+# Web framework
+fastapi==0.115.0
+uvicorn[standard]==0.30.6
+pydantic==2.9.2
+pydantic-settings==2.5.2
+python-dotenv==1.0.1
+
+# Data
+yfinance>=0.2.44
+moomoo-api>=10.2.6208
+pandas>=2.2.3
+numpy>=1.26.4
+pandas-ta>=0.3.14b
+
+# ML core
+torch>=2.5.1
+xgboost>=2.1.1
+scikit-learn>=1.5.2
+joblib>=1.4.2
+
+# NLP / Sentiment
+transformers==4.46.0
+tokenizers==0.20.3
+
+# ML ops
+mlflow==2.17.0
+optuna==4.0.0
+shap==0.46.0
+
+# Data ingestion
+newsapi-python==0.2.7
+praw==7.8.1
+workalendar==17.0.0
+
+# Scheduling
+apscheduler==3.10.4
+
+# Database + cache
+supabase==2.9.0
+redis==5.1.1
+hiredis==3.0.0
+asyncpg==0.30.0
+
+# Auth
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+
+# WebSocket / HTTP
+websockets==13.1
+httpx==0.27.2
+sse-starlette==2.1.3
+
+# Testing
+pytest==8.3.3
+pytest-asyncio==0.24.0
+
+# Utils
+python-multipart==0.0.12
