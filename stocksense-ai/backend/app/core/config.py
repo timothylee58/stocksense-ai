@@ -51,7 +51,7 @@ class Settings(BaseSettings):
     default_tickers: list[str] = ["NVDA", "MAYBANK.KL", "PBBANK.KL"]
 
     # CORS (restrict in production)
-    allowed_origins: list[str] = ["http://localhost:3000", "https://stocksense-ai.vercel.app"]
+    allowed_origins: list[str] = ["http://localhost:3000", "https://stocksense-ai.netlify.app"]
 
     class Config:
         env_file = ".env"

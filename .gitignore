@@ -29,6 +29,7 @@ stocksense.db
 **/.next/
 **/out/
 **/.vercel/
+**/.netlify/
 *.tsbuildinfo
 
 # Environment — NEVER commit

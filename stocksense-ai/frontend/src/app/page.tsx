@@ -157,8 +157,8 @@ const STEPS = [
     tag: "AUTO-DEPLOY",
     tagColor: "#ff6b35",
     prefix: "github secrets →",
-    cmd: "VERCEL_TOKEN  ·  VERCEL_ORG_ID\nVERCEL_PROJECT_ID  ·  RAILWAY_TOKEN",
-    desc: "Add these 4 secrets to your GitHub repository. On every merge to main, frontend auto-deploys to Vercel and backend auto-deploys to Railway.",
+    cmd: "NETLIFY_AUTH_TOKEN  ·  NETLIFY_SITE_ID\nRAILWAY_TOKEN",
+    desc: "Add these 3 secrets to your GitHub repository. On every merge to main, frontend auto-deploys to Netlify and backend auto-deploys to Railway.",
   },
 ];
 
@@ -177,7 +177,7 @@ const STATS = [
   { label: "Cache TTL", value: "15 / 5 min" },
   { label: "API Routes", value: "12 endpoints" },
   { label: "Data Window", value: "2yr daily" },
-  { label: "Deploy", value: "Vercel + Railway" },
+  { label: "Deploy", value: "Netlify + Railway" },
 ];
 
 // ─── Landing Page ─────────────────────────────────────────────────────────────

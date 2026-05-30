@@ -64,7 +64,7 @@ Stage 3 — LR Meta-Learner (calibrated stacker)
 | Cache | Redis (TTL 300s predictions, 900s OHLCV) |
 | Auth | Supabase Auth + JWT |
 | MCP Server | `@modelcontextprotocol/sdk` — 6 Claude Code tools |
-| Frontend Deploy | Vercel (free) |
+| Frontend Deploy | Netlify (free) |
 | Backend Deploy | Railway Starter (~RM23/month) |
 | CI/CD | GitHub Actions (lint → test → deploy + weekly retraining) |
 | Containers | Docker + Docker Compose |
@@ -75,7 +75,7 @@ Stage 3 — LR Meta-Learner (calibrated stacker)
 
 ```
 ┌──────────────────────────────────────────────┐
-│  Next.js 15 (Vercel)                         │
+│  Next.js 15 (Netlify)                        │
 │  /dashboard  /anomalies  /sentiment          │
 │  SSE live stream · Framer Motion animations  │
 └─────────────────┬────────────────────────────┘
@@ -136,7 +136,7 @@ stocksense-ai/
 ├── .github/
 │   └── workflows/
 │       ├── ci.yml             # Lint + type-check + test
-│       ├── deploy.yml         # Vercel + Railway deploy on push to main
+│       ├── deploy.yml         # Netlify + Railway deploy on push to main
 │       └── ml-retrain.yml     # Weekly Monday 9AM MYT (matrix: NVDA/MAYBANK/PBBANK)
 ├── docker-compose.yml         # Redis + FastAPI + MLflow + Next.js
 ├── .gitignore
@@ -218,7 +218,7 @@ DIRECTION_THRESHOLD=0.60
 DEFAULT_TICKERS=["NVDA","MAYBANK.KL","PBBANK.KL"]
 
 # CORS
-ALLOWED_ORIGINS=["http://localhost:3000","https://your-frontend.vercel.app"]
+ALLOWED_ORIGINS=["http://localhost:3000","https://your-site.netlify.app"]
 ```
 
 ### Frontend (`stocksense-ai/frontend/.env.local`)
@@ -320,21 +320,27 @@ Add to Claude Code settings (`~/.claude/settings.json`):
 | Workflow | Trigger | Steps |
 |----------|---------|-------|
 | `ci.yml` | Push / PR to `main` | ESLint · TypeScript · Ruff · Pytest · `next build` |
-| `deploy.yml` | Push to `main` | Vercel (frontend) · Railway (backend) |
+| `deploy.yml` | Push to `main` | Netlify (frontend) · Railway (backend) |
 | `ml-retrain.yml` | Monday 1AM UTC (9AM MYT) | Train IF + XGBoost for NVDA, MAYBANK.KL, PBBANK.KL |
 
 ---
 
 ## Deployment
 
-### Frontend → Vercel
+### Frontend → Netlify
 
 ```bash
 cd stocksense-ai/frontend
-npx vercel --prod
+npm install -g netlify-cli
+netlify login
+netlify init        # link to your Netlify site
+netlify deploy --prod
 ```
 
-Set environment variables in Vercel dashboard: `NEXT_PUBLIC_API_URL`, `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+Set environment variables in Netlify dashboard (Site settings → Environment variables):
+`NEXT_PUBLIC_API_URL`, `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+
+The `netlify.toml` in `stocksense-ai/frontend/` handles the build config and `@netlify/plugin-nextjs` for SSR support automatically.
 
 ### Backend → Railway
 
@@ -352,7 +358,8 @@ Set secrets in Railway dashboard — all vars from `.env.example`.
 ### GitHub Actions Secrets Required
 
 ```
-VERCEL_TOKEN, VERCEL_ORG_ID, VERCEL_PROJECT_ID
+NETLIFY_AUTH_TOKEN, NETLIFY_SITE_ID
+NEXT_PUBLIC_API_URL, NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY
 RAILWAY_TOKEN
 SUPABASE_URL, SUPABASE_SERVICE_KEY
 MLFLOW_TRACKING_URI, REDIS_URL
@@ -367,7 +374,7 @@ SECRET_KEY
 |---------|------|
 | Railway Starter (FastAPI + Redis + MLflow) | $5/mo ≈ RM23 |
 | Supabase Free (500MB DB, pgvector, 50k auth users) | $0 |
-| Vercel Hobby (frontend) | $0 |
+| Netlify Free (frontend) | $0 |
 | **Total** | **~RM23/month** |
 
 ---
