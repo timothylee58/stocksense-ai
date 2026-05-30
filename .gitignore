@@ -50,7 +50,7 @@ Thumbs.db
 *.log
 logs/
 
-# AI tool skill directories
+# AI tool / IDE skill directories
 .agent/
 .agents/
 .claude/
@@ -65,3 +65,24 @@ logs/
 .roo/
 .trae/
 .windsurf/
+.github/prompts/
+
+# Secrets / credentials
+*.pem
+*.key
+*.cert
+secrets/
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
+
+# Coverage
+.coverage
+htmlcov/
+coverage.xml
+
+# Docker volumes
+postgres_data/
+redis_data/
+mlflow_data/
