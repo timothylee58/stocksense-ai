@@ -39,6 +39,9 @@ class Settings(BaseSettings):
     # MLflow
     mlflow_tracking_uri: str = "http://localhost:5000"
 
+    # AI / LLM
+    anthropic_api_key: str = ""
+
     # Data sources
     news_api_key: str = ""
     reddit_client_id: str = ""

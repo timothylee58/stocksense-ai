@@ -10,6 +10,7 @@ import { TrendingUp, TrendingDown, Minus, Activity, BarChart3,
          RefreshCw, AlertTriangle, ChevronRight, Upload, CheckCircle2, XCircle } from "lucide-react";
 import Link from "next/link";
 import { PredictionResponse, StockInfo } from "@/types/stock";
+import StockBriefingPanel from "@/components/StockBriefingPanel";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
@@ -779,6 +780,9 @@ export default function Dashboard() {
                 );
               })}
             </div>
+
+            {/* ── AI Stock Briefing ────────────────────────────────────────── */}
+            <StockBriefingPanel ticker={activeTicker} />
           </>
         )}
 
