@@ -90,6 +90,23 @@ export interface SentimentResponse {
   source: 'database' | 'computed';
 }
 
+export interface BriefingSection {
+  headline: string;
+  bullets: string[];
+}
+
+export interface BriefingResponse {
+  ticker: string;
+  company: string;
+  sector: string;
+  generated_at: string;
+  sector_context: BriefingSection;
+  risk_flags: BriefingSection;
+  peer_comparison: BriefingSection;
+  analyst_framing: BriefingSection;
+  overall_summary: string;
+}
+
 export interface PipelineResponse {
   ticker: string;
   current_price: number;
