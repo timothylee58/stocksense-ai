@@ -13,6 +13,9 @@ class Settings(BaseSettings):
     cache_predict_ttl: int = 300    # 5 min
     cache_realtime_ttl: int = 10    # 10 seconds for real-time quotes
 
+    # Demo / offline mode — no paid accounts needed, serves synthetic KLSE data
+    demo_mode: bool = False
+
     # Moomoo API (real-time quotes + tick data)
     moomoo_host: str = "127.0.0.1"
     moomoo_port: int = 11111
