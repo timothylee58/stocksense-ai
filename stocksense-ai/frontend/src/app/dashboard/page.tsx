@@ -599,12 +599,13 @@ export default function Dashboard() {
                         contentStyle={{ background: "#010816", border: "1px solid rgba(0,255,200,0.15)", borderRadius: 8, fontFamily: "Share Tech Mono" }}
                         itemStyle={{ color: "#00ffcc" }}
                         labelStyle={{ color: "#4a7090", fontSize: 11 }}
-                        formatter={(val: number, name: string) => {
-                          if (name === "price")    return ["$" + val?.toFixed(2), "Price"];
-                          if (name === "forecast") return ["$" + val?.toFixed(2), "Forecast"];
-                          if (name === "upper")    return ["$" + val?.toFixed(2), "Upper CI"];
-                          if (name === "lower")    return ["$" + val?.toFixed(2), "Lower CI"];
-                          return [val, name];
+                        formatter={(val, name) => {
+                          const v = typeof val === "number" ? val.toFixed(2) : String(val ?? "");
+                          if (name === "price")    return ["$" + v, "Price"];
+                          if (name === "forecast") return ["$" + v, "Forecast"];
+                          if (name === "upper")    return ["$" + v, "Upper CI"];
+                          if (name === "lower")    return ["$" + v, "Lower CI"];
+                          return [v, String(name ?? "")];
                         }}
                       />
                       {/* Confidence interval area */}
