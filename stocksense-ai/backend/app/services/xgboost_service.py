@@ -63,6 +63,59 @@ def train_xgboost(df: pd.DataFrame, ticker: str) -> xgb.XGBClassifier:
     return model
 
 
+def shap_explain(df: pd.DataFrame, ticker: str) -> dict:
+    """
+    Compute SHAP feature contributions for the latest row using TreeExplainer.
+
+    Returns a dict with per-feature contributions sorted by |contribution|.
+    Uses first 80 % of feature rows as the background distribution — never
+    data from the test / recent window, so no leakage into the explainer.
+    """
+    import shap
+
+    mp = _model_path(ticker)
+    if not os.path.exists(mp):
+        raise ValueError(f"No XGBoost model for {ticker} — run training first")
+
+    model = xgb.XGBClassifier()
+    model.load_model(mp)
+
+    X = build_feature_matrix(df, include_anomaly=True).fillna(0)
+    if X.empty:
+        raise ValueError("Empty feature matrix")
+
+    n = len(X)
+    split = int(n * 0.80)
+    X_bg   = X.iloc[:split].values     # background: training-era distribution
+    X_last = X.iloc[[-1]].values       # the single row we're explaining
+
+    explainer   = shap.TreeExplainer(model, data=X_bg, feature_perturbation="interventional")
+    shap_vals   = explainer.shap_values(X_last)   # (1, n_features) or list[array]
+
+    # For a binary XGBClassifier shap_values is a single (1, n_feats) array (log-odds space)
+    sv = shap_vals[0] if shap_vals.ndim == 2 else shap_vals          # shape (n_features,)
+
+    proba   = model.predict_proba(X_last)[0]
+    prob_up = float(proba[1])
+    ev      = float(explainer.expected_value) if np.isscalar(explainer.expected_value) \
+              else float(explainer.expected_value[1])
+
+    features = [
+        {"feature": fn, "value": round(float(fv), 4), "contribution": round(float(c), 4)}
+        for fn, fv, c in zip(X.columns, X_last[0], sv)
+    ]
+    features.sort(key=lambda f: abs(f["contribution"]), reverse=True)
+
+    return {
+        "ticker":         ticker,
+        "prediction":     "UP" if prob_up >= 0.5 else "DOWN",
+        "probability":    round(prob_up, 4),
+        "expected_value": round(ev, 4),
+        "top_features":   features[:12],   # top 12 most impactful
+        "all_features":   features,
+    }
+
+
 def predict_xgboost(df: pd.DataFrame, ticker: str) -> tuple[float, float]:
     """
     Run XGBoost on latest row.

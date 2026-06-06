@@ -89,7 +89,9 @@ def train_lstm(df: pd.DataFrame, ticker: str) -> dict:
         layers=settings.lstm_layers,
     )
     optimiser = torch.optim.Adam(model.parameters(), lr=settings.lstm_lr)
-    criterion = nn.MSELoss()
+    # HuberLoss (delta=1.0) down-weights extreme earnings-surprise candles
+    # compared to MSE, making the LSTM more robust to outlier price spikes.
+    criterion = nn.HuberLoss(delta=1.0)
 
     best_val, patience, patience_left = float("inf"), 10, 10
     best_state = None
