@@ -14,6 +14,8 @@ import json
 import logging
 from datetime import datetime, timezone
 
+from typing import Literal
+
 from fastapi import APIRouter, Query
 from fastapi.responses import StreamingResponse
 
@@ -55,7 +57,9 @@ async def _yf_quote_my(full_code: str) -> dict | None:
         import yfinance as yf
         import pandas as pd
 
-        data = yf.download(yf_ticker, period="2d", progress=False, auto_adjust=True)
+        data = await asyncio.to_thread(
+            yf.download, yf_ticker, period="2d", progress=False, auto_adjust=True
+        )
         if isinstance(data.columns, pd.MultiIndex):
             data.columns = data.columns.get_level_values(0)
         if len(data) < 1:
@@ -177,7 +181,7 @@ async def bursa_screener(
     sector:     str   = Query(default=""),
     min_change: float = Query(default=-100.0),
     max_change: float = Query(default=100.0),
-    sort_by:    str   = Query(default="change_pct"),
+    sort_by:    Literal["change_pct", "volume", "last_price"] = Query(default="change_pct"),
 ):
     cached = await cache_get("bursa:market")
     quotes: list[dict] = cached["quotes"] if cached else list(
@@ -207,21 +211,27 @@ async def bursa_predict(code: str):
     try:
         import yfinance as yf
         import pandas as pd
-        import numpy as np
 
-        df = yf.download(yf_ticker, period="6mo", progress=False, auto_adjust=True)
+        df = await asyncio.to_thread(
+            yf.download, yf_ticker, period="6mo", progress=False, auto_adjust=True
+        )
         if isinstance(df.columns, pd.MultiIndex):
             df.columns = df.columns.get_level_values(0)
-        if len(df) < 20:
-            raise ValueError("Insufficient history")
 
         close = df["Close"].squeeze().dropna()
+        if len(close) < 20:
+            raise ValueError("Insufficient history after removing missing values")
 
         # RSI-14
         delta = close.diff()
         gain = delta.clip(lower=0).rolling(14).mean()
         loss = (-delta.clip(upper=0)).rolling(14).mean()
-        rsi = float((100 - 100 / (1 + gain / loss.replace(0, np.nan))).iloc[-1])
+        last_gain = float(gain.iloc[-1])
+        last_loss = float(loss.iloc[-1])
+        if last_loss == 0:
+            rsi = 100.0 if last_gain > 0 else 50.0
+        else:
+            rsi = 100.0 - (100.0 / (1.0 + last_gain / last_loss))
 
         # MACD (12/26)
         macd = float((close.ewm(span=12).mean() - close.ewm(span=26).mean()).iloc[-1])
@@ -239,7 +249,11 @@ async def bursa_predict(code: str):
         mom20 = float(close.pct_change(20).iloc[-1] * 100)
 
         # Volume trend
-        vol_ratio = float((df["Volume"].iloc[-5:].mean() / df["Volume"].iloc[-20:].mean()).squeeze()) if "Volume" in df else 1.0
+        vol_ratio = 1.0
+        if "Volume" in df and len(df) >= 20:
+            vol_20_mean = float(df["Volume"].iloc[-20:].mean())
+            if vol_20_mean > 0:
+                vol_ratio = float(df["Volume"].iloc[-5:].mean()) / vol_20_mean
 
         # Ensemble scoring
         score = 0.0

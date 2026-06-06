@@ -392,16 +392,7 @@ export default function BursaSensPage() {
   const movers = market ? [...market.gainers, ...market.losers] : [];
 
   return (
-    <div className="min-h-screen" style={{ background: "#030d1a", fontFamily: "Share Tech Mono, monospace" }}>
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Share+Tech+Mono&display=swap');
-        .orb  { font-family: 'Orbitron', monospace; }
-        .mono { font-family: 'Share Tech Mono', monospace; }
-        .card { background: rgba(0,12,28,0.8); border: 1px solid rgba(0,153,255,0.1); border-radius: 12px; }
-        ::-webkit-scrollbar { width: 4px; height: 4px; }
-        ::-webkit-scrollbar-track { background: transparent; }
-        ::-webkit-scrollbar-thumb { background: rgba(245,166,35,0.2); border-radius: 2px; }
-      `}</style>
+    <div className="min-h-screen mono" style={{ background: "#030d1a" }}>
 
       {/* ── Nav ───────────────────────────────────────────────────────────── */}
       <nav className="sticky top-0 z-40 flex items-center justify-between px-6 py-3"
