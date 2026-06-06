@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 from app.core.config import get_settings
+from app.core.rate_limit import RateLimitMiddleware
 from app.api.router import api_router
 
 settings = get_settings()
@@ -36,6 +37,7 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+app.add_middleware(RateLimitMiddleware, calls=60, period=60)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.allowed_origins,

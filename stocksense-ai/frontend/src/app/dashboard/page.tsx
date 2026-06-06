@@ -444,6 +444,20 @@ export default function Dashboard() {
             <span className="orb text-xs font-bold tracking-widest" style={{ color: "#00ffcc" }}>STOCKSENSE AI</span>
           </Link>
           <span className="mono text-xs opacity-20" style={{ color: "#c8e0f4" }}>/ dashboard</span>
+          <div className="flex items-center gap-1 ml-2">
+            <Link href="/dashboard/sentiment" className="mono px-2 py-1 rounded"
+              style={{ fontSize: 9, color: "#6a90b0", border: "1px solid rgba(255,255,255,0.06)" }}>
+              SENTIMENT
+            </Link>
+            <Link href="/dashboard/anomalies" className="mono px-2 py-1 rounded"
+              style={{ fontSize: 9, color: "#6a90b0", border: "1px solid rgba(255,255,255,0.06)" }}>
+              ANOMALIES
+            </Link>
+            <Link href="/dashboard/bursa" className="mono px-2 py-1 rounded flex items-center gap-1"
+              style={{ fontSize: 9, color: "#f5a623", border: "1px solid rgba(245,166,35,0.3)", background: "rgba(245,166,35,0.06)" }}>
+              <span style={{ color: "#f5a623" }}>⬡</span> BURSA&amp;SENS
+            </Link>
+          </div>
         </div>
         <div className="flex items-center gap-3">
           <ProgressFlowState state={flowState} progress={flowProgress} />
@@ -585,12 +599,13 @@ export default function Dashboard() {
                         contentStyle={{ background: "#010816", border: "1px solid rgba(0,255,200,0.15)", borderRadius: 8, fontFamily: "Share Tech Mono" }}
                         itemStyle={{ color: "#00ffcc" }}
                         labelStyle={{ color: "#4a7090", fontSize: 11 }}
-                        formatter={(val: number, name: string) => {
-                          if (name === "price")    return ["$" + val?.toFixed(2), "Price"];
-                          if (name === "forecast") return ["$" + val?.toFixed(2), "Forecast"];
-                          if (name === "upper")    return ["$" + val?.toFixed(2), "Upper CI"];
-                          if (name === "lower")    return ["$" + val?.toFixed(2), "Lower CI"];
-                          return [val, name];
+                        formatter={(val, name) => {
+                          const v = typeof val === "number" ? val.toFixed(2) : String(val ?? "");
+                          if (name === "price")    return ["$" + v, "Price"];
+                          if (name === "forecast") return ["$" + v, "Forecast"];
+                          if (name === "upper")    return ["$" + v, "Upper CI"];
+                          if (name === "lower")    return ["$" + v, "Lower CI"];
+                          return [v, String(name ?? "")];
                         }}
                       />
                       {/* Confidence interval area */}

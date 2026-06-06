@@ -1,5 +1,5 @@
 from fastapi import APIRouter
-from app.api.routes import predict, train, stocks, websocket, anomalies, sentiment, stream, health, briefing
+from app.api.routes import predict, train, stocks, websocket, anomalies, sentiment, stream, health, briefing, bursa, explain, backtest
 
 api_router = APIRouter()
 api_router.include_router(predict.router,    tags=["Predictions"])
@@ -11,3 +11,6 @@ api_router.include_router(sentiment.router,  tags=["Sentiment"])
 api_router.include_router(stream.router,     tags=["Stream"])
 api_router.include_router(health.router,     tags=["Health"])
 api_router.include_router(briefing.router,   tags=["Briefing"])
+api_router.include_router(bursa.router,      tags=["Bursa"])
+api_router.include_router(explain.router,    tags=["Explainability"])
+api_router.include_router(backtest.router,   tags=["Backtest"])
