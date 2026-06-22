@@ -57,7 +57,7 @@ class Settings(BaseSettings):
     default_tickers: list[str] = ["NVDA", "MAYBANK.KL", "PBBANK.KL"]
 
     # CORS (restrict in production)
-    allowed_origins: list[str] = ["http://localhost:3000", "https://stocksense-ai.netlify.app"]
+    allowed_origins: list[str] = ["http://localhost:3000", "https://main.your-app-id.amplifyapp.com"]
 
     class Config:
         env_file = ".env"

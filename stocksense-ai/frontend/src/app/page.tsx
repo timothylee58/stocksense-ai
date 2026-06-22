@@ -157,8 +157,8 @@ const STEPS = [
     tag: "AUTO-DEPLOY",
     tagColor: "#ff6b35",
     prefix: "github secrets →",
-    cmd: "NETLIFY_AUTH_TOKEN  ·  NETLIFY_SITE_ID\nRAILWAY_TOKEN",
-    desc: "Add these 3 secrets to your GitHub repository. On every merge to main, frontend auto-deploys to Netlify and backend auto-deploys to Railway.",
+    cmd: "AWS_ACCESS_KEY_ID  ·  AWS_SECRET_ACCESS_KEY\nAMPLIFY_APP_ID  ·  APP_RUNNER_SERVICE_ARN",
+    desc: "Add these 4 secrets to your GitHub repository. On every merge to main, frontend auto-deploys to AWS Amplify and backend image pushes to ECR then deploys via App Runner.",
   },
 ];
 
@@ -177,7 +177,7 @@ const STATS = [
   { label: "Cache TTL", value: "15 / 5 min" },
   { label: "API Routes", value: "12 endpoints" },
   { label: "Data Window", value: "2yr daily" },
-  { label: "Deploy", value: "Netlify + Railway" },
+  { label: "Deploy", value: "Amplify + App Runner" },
 ];
 
 // ─── Landing Page ─────────────────────────────────────────────────────────────

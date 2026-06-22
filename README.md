@@ -64,9 +64,9 @@ Stage 3 — LR Meta-Learner (calibrated stacker)
 | Cache | Redis (TTL 300s predictions, 900s OHLCV) |
 | Auth | Supabase Auth + JWT |
 | MCP Server | `@modelcontextprotocol/sdk` — 6 Claude Code tools |
-| Frontend Deploy | Netlify (free) |
-| Backend Deploy | Railway Starter (~RM23/month) |
-| CI/CD | GitHub Actions (lint → test → deploy + weekly retraining) |
+| Frontend Deploy | AWS Amplify (free tier, SSR-native) |
+| Backend Deploy | AWS App Runner via ECR (~$25–40/month) |
+| CI/CD | GitHub Actions (lint → test → ECR push → App Runner deploy) |
 | Containers | Docker + Docker Compose |
 
 ---
@@ -75,14 +75,15 @@ Stage 3 — LR Meta-Learner (calibrated stacker)
 
 ```
 ┌──────────────────────────────────────────────┐
-│  Next.js 15 (Netlify)                        │
+│  Next.js 15 (AWS Amplify · ap-southeast-1)   │
 │  /dashboard  /anomalies  /sentiment          │
 │  SSE live stream · Framer Motion animations  │
 └─────────────────┬────────────────────────────┘
                   │ REST + SSE
                   ▼
 ┌──────────────────────────────────────────────┐
-│  FastAPI (Railway)                           │
+│  FastAPI (AWS App Runner · ap-southeast-1)   │
+│  ECR image · 1 vCPU · 2 GB RAM              │
 │  /api/predict   /api/anomalies               │
 │  /api/sentiment /api/stream  /api/train      │
 │  APScheduler → daily 9AM MYT ingestion       │
@@ -113,8 +114,10 @@ stocksense-ai/
 │   │   │   └── services/      # 3-stage pipeline services + FinBERT + MLflow
 │   │   ├── ml/
 │   │   │   └── scripts/       # train.py, backfill.py, evaluate.py (CLI)
+│   │   ├── Dockerfile         # python:3.11-slim, HEALTHCHECK, port 8000
 │   │   └── requirements.txt
 │   ├── frontend/              # Next.js 15 App Router
+│   │   ├── amplify.yml        # AWS Amplify build spec
 │   │   └── src/
 │   │       ├── app/
 │   │       │   ├── page.tsx           # Landing (animated 3D neural net)
@@ -135,10 +138,10 @@ stocksense-ai/
 ├── backend/                   # Legacy backend (kept for reference)
 ├── .github/
 │   └── workflows/
-│       ├── ci.yml             # Lint + type-check + test
-│       ├── deploy.yml         # Netlify + Railway deploy on push to main
+│       ├── ci.yml             # Lint + type-check + test + Docker build
+│       ├── deploy.yml         # AWS Amplify + ECR → App Runner deploy on push to main
 │       └── ml-retrain.yml     # Weekly Monday 9AM MYT (matrix: NVDA/MAYBANK/PBBANK)
-├── docker-compose.yml         # Redis + FastAPI + MLflow + Next.js
+├── docker-compose.yml         # Redis + FastAPI + MLflow + Next.js (local dev)
 ├── .gitignore
 ├── LICENSE
 └── README.md
@@ -218,13 +221,13 @@ DIRECTION_THRESHOLD=0.60
 DEFAULT_TICKERS=["NVDA","MAYBANK.KL","PBBANK.KL"]
 
 # CORS
-ALLOWED_ORIGINS=["http://localhost:3000","https://your-site.netlify.app"]
+ALLOWED_ORIGINS=["http://localhost:3000","https://main.your-app-id.amplifyapp.com"]
 ```
 
 ### Frontend (`stocksense-ai/frontend/.env.local`)
 
 ```env
-NEXT_PUBLIC_API_URL=http://localhost:8000
+NEXT_PUBLIC_API_URL=https://your-service.ap-southeast-1.awsapprunner.com
 NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
 ```
@@ -280,7 +283,7 @@ Add to Claude Code settings (`~/.claude/settings.json`):
     "stocksense": {
       "command": "node",
       "args": ["path/to/stocksense-ai/mcp-server/dist/index.js"],
-      "env": { "STOCKSENSE_API_URL": "http://localhost:8000" }
+      "env": { "STOCKSENSE_API_URL": "https://your-service.ap-southeast-1.awsapprunner.com" }
     }
   }
 }
@@ -319,51 +322,97 @@ Add to Claude Code settings (`~/.claude/settings.json`):
 
 | Workflow | Trigger | Steps |
 |----------|---------|-------|
-| `ci.yml` | Push / PR to `main` | ESLint · TypeScript · Ruff · Pytest · `next build` |
-| `deploy.yml` | Push to `main` | Netlify (frontend) · Railway (backend) |
+| `ci.yml` | Push / PR to `main` | ESLint · TypeScript · Ruff · Docker build |
+| `deploy.yml` | Push to `main` | Amplify trigger · ECR push · App Runner deploy |
 | `ml-retrain.yml` | Monday 1AM UTC (9AM MYT) | Train IF + XGBoost for NVDA, MAYBANK.KL, PBBANK.KL |
 
 ---
 
 ## Deployment
 
-### Frontend → Netlify
+### Frontend → AWS Amplify
 
-```bash
-cd stocksense-ai/frontend
-npm install -g netlify-cli
-netlify login
-netlify init        # link to your Netlify site
-netlify deploy --prod
-```
+1. **Connect repo** in [AWS Amplify Console](https://console.aws.amazon.com/amplify/):
+   - New app → Host web app → GitHub → select `timothylee58/stocksense-ai`
+   - Branch: `main`
+   - App root: `stocksense-ai/frontend`
+   - Amplify auto-detects `amplify.yml`
 
-Set environment variables in Netlify dashboard (Site settings → Environment variables):
-`NEXT_PUBLIC_API_URL`, `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+2. **Set environment variables** in Amplify Console → Environment variables:
+   ```
+   NEXT_PUBLIC_API_URL=https://your-service.ap-southeast-1.awsapprunner.com
+   NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+   NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
+   ```
 
-The `netlify.toml` in `stocksense-ai/frontend/` handles the build config and `@netlify/plugin-nextjs` for SSR support automatically.
+3. Note the Amplify App ID (format: `d1234abcdef`) for GitHub secrets.
 
-### Backend → Railway
+4. Update `ALLOWED_ORIGINS` in backend `.env` with your Amplify domain (`https://main.{app-id}.amplifyapp.com`).
 
-```bash
-# Install Railway CLI
-npm install -g @railway/cli
-railway login
+### Backend → AWS App Runner (via ECR)
 
-cd stocksense-ai/backend
-railway up
-```
+1. **Create ECR repository:**
+   ```bash
+   aws ecr create-repository \
+     --repository-name stocksense/backend \
+     --region ap-southeast-1
+   ```
 
-Set secrets in Railway dashboard — all vars from `.env.example`.
+2. **Push initial image:**
+   ```bash
+   aws ecr get-login-password --region ap-southeast-1 | \
+     docker login --username AWS --password-stdin \
+     {account_id}.dkr.ecr.ap-southeast-1.amazonaws.com
+
+   docker build -t stocksense/backend ./stocksense-ai/backend
+   docker tag stocksense/backend:latest \
+     {account_id}.dkr.ecr.ap-southeast-1.amazonaws.com/stocksense/backend:latest
+   docker push \
+     {account_id}.dkr.ecr.ap-southeast-1.amazonaws.com/stocksense/backend:latest
+   ```
+
+3. **Create App Runner service** in [AWS App Runner Console](https://console.aws.amazon.com/apprunner/):
+   - Source: Container registry → Amazon ECR
+   - Image URI: `{account_id}.dkr.ecr.ap-southeast-1.amazonaws.com/stocksense/backend:latest`
+   - Port: `8000`
+   - Health check path: `/health`
+   - Instance: 1 vCPU · 2 GB
+   - Auto scaling: min 1 · max 5 instances
+   - Add all env vars from `.env.example`
+
+4. Note the Service ARN for GitHub secrets.
 
 ### GitHub Actions Secrets Required
 
 ```
-NETLIFY_AUTH_TOKEN, NETLIFY_SITE_ID
-NEXT_PUBLIC_API_URL, NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY
-RAILWAY_TOKEN
-SUPABASE_URL, SUPABASE_SERVICE_KEY
-MLFLOW_TRACKING_URI, REDIS_URL
+AWS_ACCESS_KEY_ID
+AWS_SECRET_ACCESS_KEY
+AMPLIFY_APP_ID
+APP_RUNNER_SERVICE_ARN
+NEXT_PUBLIC_API_URL
+NEXT_PUBLIC_SUPABASE_URL
+NEXT_PUBLIC_SUPABASE_ANON_KEY
+SUPABASE_URL
+SUPABASE_SERVICE_KEY
+MLFLOW_TRACKING_URI
+REDIS_URL
 SECRET_KEY
+```
+
+**IAM permissions for the deploy user** (least-privilege):
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    { "Effect": "Allow", "Action": ["amplify:StartJob"], "Resource": "*" },
+    { "Effect": "Allow", "Action": ["ecr:GetAuthorizationToken"], "Resource": "*" },
+    { "Effect": "Allow", "Action": ["ecr:BatchCheckLayerAvailability", "ecr:InitiateLayerUpload",
+        "ecr:UploadLayerPart", "ecr:CompleteLayerUpload", "ecr:PutImage"],
+      "Resource": "arn:aws:ecr:ap-southeast-1:{account_id}:repository/stocksense/backend" },
+    { "Effect": "Allow", "Action": ["apprunner:StartDeployment"],
+      "Resource": "arn:aws:apprunner:ap-southeast-1:{account_id}:service/stocksense-backend/*" }
+  ]
+}
 ```
 
 ---
@@ -372,10 +421,13 @@ SECRET_KEY
 
 | Service | Cost |
 |---------|------|
-| Railway Starter (FastAPI + Redis + MLflow) | $5/mo ≈ RM23 |
+| AWS Amplify (frontend, SSR) | Free tier (generous) |
+| AWS App Runner 1 vCPU · 2 GB (backend) | ~$35–50/month |
 | Supabase Free (500MB DB, pgvector, 50k auth users) | $0 |
-| Netlify Free (frontend) | $0 |
-| **Total** | **~RM23/month** |
+| ECR storage (~500MB image) | ~$0.05/month |
+| **Total** | **~$35–50/month** |
+
+> App Runner bills per active compute hour. Scale min instances to 0 (pause) when not demoing to cut costs to near zero.
 
 ---
 
