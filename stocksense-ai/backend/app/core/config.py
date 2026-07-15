@@ -35,7 +35,15 @@ class Settings(BaseSettings):
     lstm_lr: float = 0.001
     models_dir: str = "./models"
 
-    # Supabase
+    # ClickHouse — OHLCV / indicators / sentiment / backtest history
+    clickhouse_host: str = "localhost"
+    clickhouse_port: int = 8123
+    clickhouse_user: str = "stocksense"
+    clickhouse_password: str = "stocksense_ch"
+    clickhouse_db: str = "stocksense"
+    clickhouse_enabled: bool = True
+
+    # Supabase — auth / user data / training jobs / watchlists
     supabase_url: str = ""
     supabase_service_key: str = ""
 

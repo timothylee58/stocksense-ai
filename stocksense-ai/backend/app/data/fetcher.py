@@ -31,8 +31,12 @@ except ImportError:
 
 from app.core.config import get_settings
 from app.core.redis_client import cache_get, cache_set
+from app.core.ch_store import ch_read_ohlcv, ch_write_ohlcv, ch_is_fresh
 
 logger = logging.getLogger(__name__)
+
+# Strong references keep fire-and-forget tasks alive until GC is safe.
+_BACKGROUND_TASKS: set = set()
 settings = get_settings()
 
 
@@ -177,6 +181,17 @@ async def fetch_stock_data(ticker: str, period_years: int = 2) -> pd.DataFrame:
         df.index = pd.to_datetime(df.index)
         return df
 
+    # ── ClickHouse L2 cache ───────────────────────────────────────────────────
+    # Avoids yfinance network calls when we already have fresh historical data.
+    if ch_is_fresh(ticker.upper(), period_years):
+        ch_df = ch_read_ohlcv(ticker.upper(), period_years)
+        if ch_df is not None and len(ch_df) >= 60:
+            logger.debug("ClickHouse cache hit for %s", ticker)
+            serialisable = ch_df.copy()
+            serialisable.index = serialisable.index.strftime("%Y-%m-%d")
+            await cache_set(cache_key, serialisable.to_dict(), settings.cache_dataset_ttl)
+            return ch_df
+
     # Try moomoo first for historical K-line data
     if _HAS_MOOMOO_IMPORT and MoomooClient and MoomooClient.is_connected():
         try:
@@ -219,6 +234,13 @@ async def fetch_stock_data(ticker: str, period_years: int = 2) -> pd.DataFrame:
     df = raw[["Open", "High", "Low", "Close", "Volume"]].copy()
     df = add_indicators(df)
     df = df.dropna(subset=["Close"])
+
+    # Persist to ClickHouse (fire-and-forget, non-blocking).
+    # Kept in _BACKGROUND_TASKS so the GC doesn't collect the task mid-flight.
+    import asyncio as _asyncio
+    _task = _asyncio.create_task(_asyncio.to_thread(ch_write_ohlcv, ticker.upper(), df))
+    _BACKGROUND_TASKS.add(_task)
+    _task.add_done_callback(_BACKGROUND_TASKS.discard)
 
     # Store in Redis (convert index to string)
     serialisable = df.copy()

@@ -42,7 +42,7 @@ async def _run_shap(ticker: str) -> dict:
             "demo": True,
         }
 
-    df = await fetch_stock_data(ticker, period="1y")
+    df = await fetch_stock_data(ticker, period_years=1)
     if df is None or df.empty:
         raise ValueError(f"No data for {ticker}")
 
