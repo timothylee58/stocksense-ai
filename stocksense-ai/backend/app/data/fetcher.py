@@ -34,6 +34,9 @@ from app.core.redis_client import cache_get, cache_set
 from app.core.ch_store import ch_read_ohlcv, ch_write_ohlcv, ch_is_fresh
 
 logger = logging.getLogger(__name__)
+
+# Strong references keep fire-and-forget tasks alive until GC is safe.
+_BACKGROUND_TASKS: set = set()
 settings = get_settings()
 
 
@@ -232,9 +235,12 @@ async def fetch_stock_data(ticker: str, period_years: int = 2) -> pd.DataFrame:
     df = add_indicators(df)
     df = df.dropna(subset=["Close"])
 
-    # Persist to ClickHouse (fire-and-forget, non-blocking)
+    # Persist to ClickHouse (fire-and-forget, non-blocking).
+    # Kept in _BACKGROUND_TASKS so the GC doesn't collect the task mid-flight.
     import asyncio as _asyncio
-    _asyncio.create_task(_asyncio.to_thread(ch_write_ohlcv, ticker.upper(), df))
+    _task = _asyncio.create_task(_asyncio.to_thread(ch_write_ohlcv, ticker.upper(), df))
+    _BACKGROUND_TASKS.add(_task)
+    _task.add_done_callback(_BACKGROUND_TASKS.discard)
 
     # Store in Redis (convert index to string)
     serialisable = df.copy()

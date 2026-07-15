@@ -42,14 +42,30 @@ def _market(ticker: str) -> str:
 
 
 def _to_date(d) -> date:
-    if isinstance(d, datetime):
-        return d.date()
-    if isinstance(d, date):
+    if isinstance(d, date) and not isinstance(d, datetime):
         return d
     try:
-        return date.fromisoformat(str(d))
+        return pd.to_datetime(d).date()
     except Exception:
         return date.today()
+
+
+def _safe_float(val, default: float = 0.0) -> float:
+    if val is None:
+        return default
+    try:
+        return float(val)
+    except (ValueError, TypeError):
+        return default
+
+
+def _safe_int(val, default: int = 0) -> int:
+    if val is None:
+        return default
+    try:
+        return int(val)
+    except (ValueError, TypeError):
+        return default
 
 
 # ── OHLCV ──────────────────────────────────────────────────────────────────────
@@ -63,7 +79,8 @@ def ch_read_ohlcv(ticker: str, period_years: int) -> Optional[pd.DataFrame]:
     if client is None:
         return None
     try:
-        cutoff = date.today().replace(year=date.today().year - period_years)
+        from datetime import timedelta
+        cutoff = date.today() - timedelta(days=365 * period_years)
         result = client.query(
             f"""
             SELECT {', '.join(_CH_SELECT_COLS)}
@@ -142,7 +159,7 @@ def ch_is_fresh(ticker: str, period_years: int, max_staleness_days: int = 2) -> 
         return False
     try:
         result = client.query(
-            "SELECT max(date) AS latest FROM ohlcv FINAL WHERE ticker = {ticker:String}",
+            "SELECT max(date) AS latest FROM ohlcv WHERE ticker = {ticker:String}",
             parameters={"ticker": ticker},
         )
         if result.row_count == 0:
@@ -226,16 +243,16 @@ def ch_write_backtest(ticker: str, result: dict) -> None:
             "run_at":            datetime.utcnow(),
             "test_start":        _to_date(period.get("start")),
             "test_end":          _to_date(period.get("end")),
-            "total_return":      float(m.get("total_return", 0)),
-            "benchmark_return":  float(m.get("benchmark_return", 0)),
-            "alpha":             float(m.get("alpha", 0)),
-            "sharpe_ratio":      float(m.get("sharpe_ratio", 0)),
-            "sortino_ratio":     float(m.get("sortino_ratio", 0)),
-            "calmar_ratio":      float(m.get("calmar_ratio", 0)),
-            "max_drawdown":      float(m.get("max_drawdown", 0)),
-            "win_rate":          float(m.get("win_rate", 0)),
-            "n_trades":          int(m.get("n_trades", 0)),
-            "annualised_return": float(m.get("annualised_return", 0)),
+            "total_return":      _safe_float(m.get("total_return")),
+            "benchmark_return":  _safe_float(m.get("benchmark_return")),
+            "alpha":             _safe_float(m.get("alpha")),
+            "sharpe_ratio":      _safe_float(m.get("sharpe_ratio")),
+            "sortino_ratio":     _safe_float(m.get("sortino_ratio")),
+            "calmar_ratio":      _safe_float(m.get("calmar_ratio")),
+            "max_drawdown":      _safe_float(m.get("max_drawdown")),
+            "win_rate":          _safe_float(m.get("win_rate")),
+            "n_trades":          _safe_int(m.get("n_trades")),
+            "annualised_return": _safe_float(m.get("annualised_return")),
         }
         client.insert_df("backtest_results", pd.DataFrame([row]))
         logger.info("CH write backtest %s (sharpe=%.2f)", ticker, row["sharpe_ratio"])

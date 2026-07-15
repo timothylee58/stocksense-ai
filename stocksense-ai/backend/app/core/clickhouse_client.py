@@ -2,22 +2,26 @@
 Singleton ClickHouse client.
 Returns None gracefully when ClickHouse is unavailable so callers
 can fall back to yfinance / Redis without crashing.
+Uses a 60-second cooldown after failure so the process can recover
+automatically without blocking every request.
 """
 from __future__ import annotations
 
 import logging
+import time
 
 logger = logging.getLogger(__name__)
 
 _client = None          # cached after first successful connect
-_unavailable = False    # set True only after a failed attempt
+_unavailable_until = 0.0  # epoch time; 0 means "try now"
 
 
 def get_ch_client():
-    global _client, _unavailable
+    global _client, _unavailable_until
     if _client is not None:
         return _client
-    if _unavailable:
+    now = time.time()
+    if now < _unavailable_until:
         return None
     try:
         import clickhouse_connect
@@ -25,7 +29,7 @@ def get_ch_client():
 
         s = get_settings()
         if not s.clickhouse_enabled:
-            _unavailable = True
+            _unavailable_until = float("inf")  # disabled in config — never retry
             return None
 
         _client = clickhouse_connect.get_client(
@@ -42,13 +46,13 @@ def get_ch_client():
         logger.info("ClickHouse connected at %s:%s", s.clickhouse_host, s.clickhouse_port)
         return _client
     except Exception as exc:
-        logger.warning("ClickHouse unavailable — falling back to yfinance/Redis: %s", exc)
-        _unavailable = True
+        logger.warning("ClickHouse unavailable — retrying in 60s: %s", exc)
+        _unavailable_until = time.time() + 60.0
         return None
 
 
 def reset_ch_client() -> None:
     """Force reconnect on next call — useful after a ClickHouse restart."""
-    global _client, _unavailable
+    global _client, _unavailable_until
     _client = None
-    _unavailable = False
+    _unavailable_until = 0.0
