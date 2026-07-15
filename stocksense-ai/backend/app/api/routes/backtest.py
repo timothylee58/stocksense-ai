@@ -14,6 +14,7 @@ from fastapi import APIRouter, HTTPException
 
 from app.core.config import get_settings
 from app.core.redis_client import cache_get, cache_set
+from app.core.ch_store import ch_write_backtest
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -70,7 +71,7 @@ async def backtest_ticker(ticker: str):
         from app.data.fetcher import fetch_stock_data
         from app.services.backtest_service import run_backtest
 
-        df = await fetch_stock_data(tk, period="2y")
+        df = await fetch_stock_data(tk, period_years=2)
         if df is None or df.empty:
             raise HTTPException(status_code=404, detail=f"No data for {tk}")
 
@@ -84,4 +85,8 @@ async def backtest_ticker(ticker: str):
         raise HTTPException(status_code=500, detail=f"Backtest error: {e}")
 
     await cache_set(cache_key, result, ttl=3600)
+
+    # Persist metrics to ClickHouse for historical tracking (non-blocking)
+    asyncio.create_task(asyncio.to_thread(ch_write_backtest, tk, result))
+
     return result
