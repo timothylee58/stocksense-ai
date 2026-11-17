@@ -1,9 +1,9 @@
 """Execution loop: signals -> exits -> risk-gated entries -> fills -> ledger.
 
-    python -m app.agent.loop --tickers NVDA,AAPL --cycles 1 --sim
+    python -m app.agent.loop --tickers NVDA,AAPL --cycles 1 --broker sim
 
-Only the simulator broker is wired up so far; add a Moomoo paper adapter
-that satisfies `app.agent.broker.Broker` to trade the challenge account.
+Use --broker moomoo for the OpenD paper (SIMULATE) account; default is the
+in-memory simulator.
 """
 from __future__ import annotations
 
@@ -94,7 +94,14 @@ def predictor_source(tickers: list[str]) -> SignalSource:
 
 async def _main(args: argparse.Namespace) -> None:
     tickers = [t.strip().upper() for t in args.tickers.split(",") if t.strip()]
-    agent = TradingAgent(SimBroker(), RiskManager(), Ledger(args.ledger), predictor_source(tickers))
+    if args.broker == "moomoo":
+        from app.agent.moomoo_broker import MoomooSimBroker
+        from app.core.config import get_settings
+        cfg = get_settings()
+        broker: Broker = MoomooSimBroker(cfg.moomoo_host, cfg.moomoo_port, market=args.market)
+    else:
+        broker = SimBroker()
+    agent = TradingAgent(broker, RiskManager(), Ledger(args.ledger), predictor_source(tickers))
     for i in range(args.cycles):
         await agent.run_cycle()
         if i < args.cycles - 1:
@@ -108,5 +115,7 @@ if __name__ == "__main__":
     ap.add_argument("--cycles", type=int, default=1)
     ap.add_argument("--interval", type=float, default=300)
     ap.add_argument("--ledger", default="logs/agent_ledger.jsonl")
-    ap.add_argument("--sim", action="store_true", help="simulated broker (default, only option for now)")
+    ap.add_argument("--broker", choices=["sim", "moomoo"], default="sim",
+                    help="sim = in-memory; moomoo = OpenD paper (SIMULATE) account")
+    ap.add_argument("--market", default="US", help="moomoo market for --broker moomoo")
     asyncio.run(_main(ap.parse_args()))
