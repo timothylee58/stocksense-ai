@@ -322,8 +322,8 @@ def test_partial_exit_pnl_survives_restart(tmp_path):
     a2 = TradingAgent(b, r2, Ledger(str(tmp_path / "l2.jsonl")), gain, state_path=state)
     asyncio.run(a2.run_cycle())
     assert len(r2.closed_pnls) == 1
-    f1 = [e for e in a1.ledger.read() if e["event"] == "fill"][0]["realized_pnl"]
-    f2 = [e for e in a2.ledger.read() if e["event"] == "fill"][0]["realized_pnl"]
+    f1 = next(e for e in a1.ledger.read() if e["event"] == "fill")["realized_pnl"]
+    f2 = next(e for e in a2.ledger.read() if e["event"] == "fill")["realized_pnl"]
     assert f1 < 0 < f2
     assert r2.closed_pnls[0] == pytest.approx(f1 + f2)   # whole round trip, not just the last leg
     assert r2.open_trade_pnl == {}
