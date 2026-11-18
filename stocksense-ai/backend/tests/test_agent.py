@@ -97,3 +97,13 @@ def test_loop_flattens_on_kill_switch(tmp_path):
     asyncio.run(a.run_cycle())
     assert not a.broker.get_account().positions
     assert any(e.get("action") == "flatten" for e in a.ledger.read())
+
+
+def test_report_summarises_ledger(tmp_path):
+    from app.agent.report import summarise, to_markdown
+    a = _agent(tmp_path, [[sig()], [sig(p=94.0, a="HOLD")]])
+    asyncio.run(a.run_cycle())
+    asyncio.run(a.run_cycle())
+    s = summarise(a.ledger.read())
+    assert s["n_closed_trades"] == 1 and s["win_rate_pct"] == 0
+    assert s["max_drawdown_pct"] > 0 and "Trading agent report" in to_markdown(s)
