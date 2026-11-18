@@ -88,6 +88,8 @@ class Settings(BaseSettings):
     allowed_origins: list[str] = [
         "http://localhost:3000",
         "http://localhost:8081",  # Expo dev server / web
+        "http://localhost:8888",  # Next.js dev server
+        "http://127.0.0.1:8888",
         "https://main.your-app-id.amplifyapp.com",
     ]
 

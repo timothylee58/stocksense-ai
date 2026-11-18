@@ -15,6 +15,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import math
 from datetime import datetime, timezone
 from typing import Literal
 
@@ -59,6 +60,15 @@ def _parse_code(code: str) -> tuple[str, str]:
     return (parts[1], parts[0]) if len(parts) == 2 else (code.upper(), "MY")
 
 
+def _num(value, default: float = 0.0) -> float:
+    """Coerce to a JSON-safe finite float (yfinance can emit NaN/Inf)."""
+    try:
+        f = float(value)
+    except (TypeError, ValueError):
+        return default
+    return f if math.isfinite(f) else default
+
+
 async def _yf_quote_my(full_code: str) -> dict | None:
     """Try yfinance with the .KL suffix as a secondary fallback."""
     yf_ticker = MY_YF_TICKERS.get(full_code)
@@ -78,15 +88,17 @@ async def _yf_quote_my(full_code: str) -> dict | None:
 
         last = data.iloc[-1]
         prev = data.iloc[-2] if len(data) >= 2 else last
-        last_price = float(last.get("Close", 0))
-        prev_close = float(prev.get("Close", last_price))
+        last_price = _num(last.get("Close"))
+        prev_close = _num(prev.get("Close"), last_price)
+        if last_price <= 0:
+            return None
         return {
             "last_price":       last_price,
-            "open_price":       float(last.get("Open", 0)),
-            "high_price":       float(last.get("High", 0)),
-            "low_price":        float(last.get("Low", 0)),
+            "open_price":       _num(last.get("Open")),
+            "high_price":       _num(last.get("High")),
+            "low_price":        _num(last.get("Low")),
             "prev_close_price": prev_close,
-            "volume":           float(last.get("Volume", 0)),
+            "volume":           _num(last.get("Volume")),
             "bid_price":        0.0,
             "ask_price":        0.0,
             "source":           "yfinance_kl",
@@ -112,8 +124,8 @@ async def _fetch_quote(full_code: str) -> dict:
         logger.warning("moomoo fetch failed for %s: %s", full_code, exc)
         raw = (await _yf_quote_my(full_code)) or {"last_price": 0.0, "source": "error"}
 
-    lp = raw.get("last_price", 0.0)
-    pc = raw.get("prev_close_price", 0.0)
+    lp = _num(raw.get("last_price"))
+    pc = _num(raw.get("prev_close_price"))
     change_pct = round(((lp - pc) / pc * 100) if pc else 0.0, 2)
     ticker_short = full_code.split(".")[-1]
 
@@ -124,13 +136,13 @@ async def _fetch_quote(full_code: str) -> dict:
         "sector":           meta.get("sector", "Unknown"),
         "market":           "MY",
         "last_price":       round(lp, 4),
-        "open_price":       round(raw.get("open_price", 0.0), 4),
-        "high_price":       round(raw.get("high_price", 0.0), 4),
-        "low_price":        round(raw.get("low_price", 0.0), 4),
+        "open_price":       round(_num(raw.get("open_price")), 4),
+        "high_price":       round(_num(raw.get("high_price")), 4),
+        "low_price":        round(_num(raw.get("low_price")), 4),
         "prev_close_price": round(pc, 4),
-        "bid_price":        round(raw.get("bid_price", 0.0), 4),
-        "ask_price":        round(raw.get("ask_price", 0.0), 4),
-        "volume":           raw.get("volume", 0),
+        "bid_price":        round(_num(raw.get("bid_price")), 4),
+        "ask_price":        round(_num(raw.get("ask_price")), 4),
+        "volume":           _num(raw.get("volume")),
         "change_pct":       change_pct,
         "change_abs":       round(lp - pc, 4),
         "source":           raw.get("source", "moomoo"),
@@ -142,11 +154,16 @@ async def _fetch_quote(full_code: str) -> dict:
 
 @router.get("/bursa/stocks", response_model=list[BursaStockSchema])
 async def list_bursa_stocks():
-    """List all tracked Malaysian stocks."""
+    """List all tracked Malaysian stocks with quotes."""
     if settings.demo_mode:
-        meta = MY_STOCKS
-        return [get_demo_quote(k, v) for k, v in meta.items()]
-    return [{"code": k, "ticker": k.split(".")[-1], **v} for k, v in MY_STOCKS.items()]
+        return [get_demo_quote(k, v) for k, v in MY_STOCKS.items()]
+    cache_key = "bursa:stocks"
+    cached = await cache_get(cache_key)
+    if cached:
+        return cached
+    quotes = list(await asyncio.gather(*[_fetch_quote(c) for c in MY_STOCKS]))
+    await cache_set(cache_key, quotes, 30)
+    return quotes
 
 
 @router.get("/bursa/market", response_model=MarketSnapshotSchema)

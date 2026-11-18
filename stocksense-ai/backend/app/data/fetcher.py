@@ -195,8 +195,6 @@ async def fetch_stock_data(ticker: str, period_years: int = 2) -> pd.DataFrame:
     # Try moomoo first for historical K-line data
     if _HAS_MOOMOO_IMPORT and MoomooClient and MoomooClient.is_connected():
         try:
-            from app.core.config import get_settings
-            settings = get_settings()
             if settings.moomoo_enabled:
                 period_days = period_years * 365
                 df = await fetch_stock_data_moomoo(ticker, period_days)

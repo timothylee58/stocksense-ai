@@ -72,7 +72,11 @@ def _get_client() -> anthropic.Anthropic:
     if _client is None:
         from app.core.config import get_settings
         settings = get_settings()
-        _client = anthropic.Anthropic(api_key=settings.anthropic_api_key or None)
+        if not settings.anthropic_api_key:
+            raise RuntimeError(
+                "ANTHROPIC_API_KEY is not configured — set it in backend/.env to enable AI briefings."
+            )
+        _client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
     return _client
 
 
