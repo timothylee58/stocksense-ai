@@ -20,6 +20,7 @@ class TradeSignal:
     confidence: float            # 0.0-1.0
     price: float                 # latest price
     stop_loss: float | None = None
+    source: str | None = None    # "xgb_binary" | "rule_based" | None (unknown)
 
 
 @dataclass

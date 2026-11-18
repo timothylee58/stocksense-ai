@@ -1,7 +1,11 @@
 """Stage 2 — XGBoost direction classifier."""
 from __future__ import annotations
+
+import json
 import logging
+import math
 import os
+
 import numpy as np
 import pandas as pd
 import xgboost as xgb
@@ -17,6 +21,55 @@ settings = get_settings()
 def _model_path(ticker: str) -> str:
     os.makedirs(settings.models_dir, exist_ok=True)
     return os.path.join(settings.models_dir, f"xgb_{ticker.upper()}.json")
+
+
+def _features_path(ticker: str) -> str:
+    return os.path.join(settings.models_dir, f"xgb_{ticker.upper()}.features.json")
+
+
+def save_feature_columns(ticker: str, columns: list[str]) -> None:
+    """Record the exact feature columns (and order) the model was trained on, so inference
+    from any data source lines up with them even when e.g. `anomaly_score` is absent."""
+    os.makedirs(settings.models_dir, exist_ok=True)
+    with open(_features_path(ticker), "w", encoding="utf-8") as f:
+        json.dump(list(columns), f)
+
+
+def _load_feature_columns(ticker: str) -> list[str] | None:
+    try:
+        with open(_features_path(ticker), encoding="utf-8") as f:
+            cols = json.load(f)
+        return cols if isinstance(cols, list) and all(isinstance(c, str) for c in cols) else None
+    except (OSError, ValueError):
+        return None
+
+
+def predict_prob_up(df: pd.DataFrame, ticker: str) -> float | None:
+    """P(next-day close > today's close) from the trained binary model.
+
+    This is the ONE model the trading signal, `/api/explain` and `/api/backtest` all use.
+    Returns None when there is no usable model; it never trains (models are pre-trained
+    artefacts), so callers can fall back and say so.
+    """
+    mp = _model_path(ticker)
+    if not os.path.exists(mp):
+        return None
+    model = xgb.XGBClassifier()
+    model.load_model(mp)
+
+    X = build_feature_matrix(df, include_anomaly=True)
+    if X.empty:
+        return None
+    cols = _load_feature_columns(ticker)
+    if cols:
+        X = X.reindex(columns=cols, fill_value=0.0)
+    elif X.shape[1] != model.n_features_in_:
+        logger.warning("%s: model expects %d features, data has %d and no feature list was saved",
+                       ticker, model.n_features_in_, X.shape[1])
+        return None
+    X_last = X.iloc[[-1]].fillna(0).values.astype(np.float64)
+    p = float(model.predict_proba(X_last)[0][1])
+    return p if math.isfinite(p) else None
 
 
 def train_xgboost(df: pd.DataFrame, ticker: str) -> xgb.XGBClassifier:
@@ -59,6 +112,7 @@ def train_xgboost(df: pd.DataFrame, ticker: str) -> xgb.XGBClassifier:
     )
 
     model.save_model(_model_path(ticker))
+    save_feature_columns(ticker, list(X.columns))
     logger.info("XGBoost trained for %s — %d samples, %d features", ticker, len(X), X.shape[1])
     return model
 

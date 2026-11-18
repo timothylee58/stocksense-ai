@@ -70,7 +70,7 @@ position; 60% max gross exposure; 5 max positions; soft drawdown 5% (half size);
 | R3 | Kill switch halts and attempts to flatten within one cycle | Partial: retried up to 3 times and `flatten_incomplete` is logged, but broker rejections can still leave positions (tested with sim broker only) |
 | R4 | Position sizing from risk-to-stop, capped by limits | Done |
 | R5 | Moomoo paper broker adapter | Written, **not tested against a real OpenD** |
-| R6 | Signals come from a model that is actually trained and validated | **Open** (see section 8) |
+| R6 | Signals come from a model that is actually trained and validated | Partial: one shared model and no trades on the fallback (done); validation on real data still open |
 | R7 | Qoder agents/skills built and run in Qoder Cloud Agents | **Open** (drafts only) |
 | R8 | Daily report generated from ledger | Done (`app.agent.report`) |
 | R9 | Real paper-trading record covering several trading days | **Open** |
@@ -85,30 +85,27 @@ position; 60% max gross exposure; 5 max positions; soft drawdown 5% (half size);
 | Risk-adjusted return | 25% | Run the loop daily on paper from as early as possible; report Sharpe/drawdown from real fills | No paper record yet; short window |
 | Reusability & documentation | 15% | `qoder/` skills, `ARCHITECTURE.md`, this PRD, tests, Makefile/Docker | Needs a quickstart and the deck |
 
-## 8. Known issues to fix (affect credibility)
+## 8. Model status
 
-1. **Two separate XGBoost pipelines.** The live predictor (`predict_xgb`) loads
-   `models/<TICKER>_xgb.pkl`, a 3-class BUY/SELL/HOLD model (about +/-1.5% over 5 days) trained
-   by `POST /api/train/<TICKER>`. The Optuna/SHAP/backtest pipeline (`scripts/train_model.py`)
-   trains a *binary next-day UP/DOWN* model saved as `models/xgb_<TICKER>.json`, which is used by
-   `/api/explain` and `/api/backtest` but **not** by `run_prediction`. So the backtest and SHAP
-   currently describe a different model from the one that trades. Without the pickle, the
-   predictor silently falls back to a rule-based RSI+MACD signal.
+1. **One XGBoost model (resolved).** The trading signal, `/api/explain` (SHAP) and
+   `/api/backtest` all use the binary next-day UP/DOWN model `models/xgb_<TICKER>.json`, trained
+   by `scripts/train_model.py` (Optuna) or `POST /api/train/<TICKER>`. A `.features.json` file
+   next to it records the exact training columns so inference lines up with them. With no trained
+   model the XGBoost leg falls back to a rule-based RSI+MACD signal, and the prediction reports
+   `signal_source: "rule_based"`; the agent's risk gate refuses to open positions on that fallback
+   (`require_model_signal`). Inference never trains a model.
 2. **Ensemble weights differ from the documented 50/30/20.** `run_prediction` uses 60% LSTM
    (7-day forecast direction) and 40% XGBoost, with no FinBERT; its `sentiment_score` is derived
    from RSI/MACD, not news. FinBERT currently feeds `ingest_news`/Supabase, not the signal.
-3. **LSTM did not train in the demo run** (`"lstm": {}`); cause not diagnosed.
+3. **LSTM is skipped in demo mode** by design (`train_model.py` only trains it on live data), so
+   `"lstm": {}` in a `--demo` run is expected.
 4. Demo-mode metrics are noise; no real-data validation exists yet.
-
-Decision needed: either point the agent at the `train_model.py` binary model (so backtest, SHAP
-and trading share one model) or retrain via the existing endpoint. The first is cleaner for the
-story and the report.
 
 ## 9. Plan (today 18 Nov to 30 Nov)
 
 | Dates | Work | Owner |
 |---|---|---|
-| 18-19 | Unify the signal model (fix section 8.1); train on live data; verify broker against OpenD (columns, security firm) | Claude + entrant |
+| 18-19 | Train on live data (`scripts/train_model.py`, DEMO_MODE=false); verify broker against OpenD (columns, security firm) | Entrant (Claude supports) |
 | 19-20 | Start paper trading loop daily; tune limits from first fills | Entrant (needs OpenD) |
 | 19-24 | Build the five agents in Qoder Cloud Agents from `qoder/` | Entrant (Qoder access) |
 | 24-28 | Iterate on failures; add dashboard/report automation; collect "what failed and why" | Both |

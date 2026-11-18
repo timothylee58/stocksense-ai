@@ -4,7 +4,7 @@ from fastapi import APIRouter, BackgroundTasks, HTTPException
 
 from app.data.fetcher import fetch_stock_data
 from app.ml.models.lstm import train_lstm
-from app.ml.models.xgb_model import train_xgb
+from app.services.xgboost_service import train_xgboost
 from app.core.redis_client import cache_delete
 from app.core.stocks import get_all_tickers
 
@@ -21,7 +21,8 @@ async def _train_all_models(ticker: str):
         loop = asyncio.get_event_loop()
 
         lstm_meta = await loop.run_in_executor(None, train_lstm, df, ticker)
-        xgb_meta  = await loop.run_in_executor(None, train_xgb, df, ticker)
+        await loop.run_in_executor(None, train_xgboost, df, ticker)   # the one binary model
+        xgb_meta = {"model": f"xgb_{ticker}.json", "target": "next-day UP/DOWN"}
 
         # Bust the prediction cache so next /predict returns fresh results
         await cache_delete(f"prediction:{ticker}")

@@ -692,3 +692,22 @@ def test_non_finite_account_equity_holds_entries_instead_of_disabling_protection
     assert not r.should_flatten()                 # exits and stops are not blocked by it
     r.mark(100_000, NOW)                          # a good read clears the hold
     assert r.evaluate_entry(sig(), SimBroker().get_account()).approved
+
+
+# ── unified model: the agent never opens positions on the fallback signal ───
+def test_rule_based_fallback_signal_cannot_open_a_position():
+    fallback = TradeSignal("NVDA", "BUY", 0.9, 100.0, 95.0, "rule_based")
+    d = rm().evaluate_entry(fallback, SimBroker().get_account())
+    assert not d.approved and "rule-based" in d.reason
+    trained = TradeSignal("NVDA", "BUY", 0.9, 100.0, 95.0, "xgb_binary")
+    assert rm().evaluate_entry(trained, SimBroker().get_account()).approved
+    unknown = TradeSignal("NVDA", "BUY", 0.9, 100.0, 95.0, None)
+    assert rm().evaluate_entry(unknown, SimBroker().get_account()).approved   # source not reported
+
+
+def test_gate_can_be_relaxed_explicitly():
+    lim = RiskLimits(kill_switch_path="/nonexistent/KS", require_model_signal=False)
+    r = RiskManager(lim)
+    r.mark(100_000, NOW)
+    fallback = TradeSignal("NVDA", "BUY", 0.9, 100.0, 95.0, "rule_based")
+    assert r.evaluate_entry(fallback, SimBroker().get_account()).approved

@@ -115,7 +115,8 @@ class TradingAgent:
         signals = await self.source()
         for s_ in signals:      # full input audit trail, including HOLDs and no-op SELLs
             self.ledger.write("signal", ticker=s_.ticker, action=s_.action,
-                              confidence=s_.confidence, price=s_.price, stop_loss=s_.stop_loss)
+                              confidence=s_.confidence, price=s_.price, stop_loss=s_.stop_loss,
+                              source=s_.source)
         self.broker.update_prices({s.ticker: s.price for s in signals})
         acct = self.broker.get_account()
         self._reconcile(acct)
@@ -196,7 +197,8 @@ def predictor_source(tickers: list[str]) -> SignalSource:
             try:
                 p = await run_prediction(t)
                 out.append(TradeSignal(t, p["signal"], float(p["confidence"]),
-                                       float(p["current_price"]), p["timing"].get("stop_loss")))
+                                       float(p["current_price"]), p["timing"].get("stop_loss"),
+                                       p.get("signal_source")))
             except Exception as e:  # noqa: BLE001 - one bad ticker must not stop the cycle
                 logger.warning("signal failed for %s: %s", t, e)
         return out

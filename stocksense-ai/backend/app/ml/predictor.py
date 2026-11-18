@@ -16,7 +16,7 @@ import pandas as pd
 
 from app.data.fetcher import fetch_stock_data
 from app.ml.models.lstm import predict_lstm
-from app.ml.models.xgb_model import predict_xgb
+from app.ml.models.xgb_model import predict_xgb_with_source
 from app.core.config import get_settings
 from app.core.redis_client import cache_get, cache_set
 from app.core.stocks import get_stock_info
@@ -77,6 +77,7 @@ class PredictionResult:
     sma_50: float | None
     chart_data: list[dict]       # 90 days history
     forecast_data: list[dict]    # 30-day forecast
+    signal_source: str = "unknown"   # XGBoost leg: "xgb_binary" (trained model) or "rule_based"
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -297,7 +298,7 @@ async def run_prediction(ticker: str) -> dict:
 
     # ── ML ──
     forecast_prices, lstm_conf = predict_lstm(df, ticker)
-    xgb_signal, xgb_conf = predict_xgb(df, ticker)
+    xgb_signal, xgb_conf, xgb_source = predict_xgb_with_source(df, ticker)
 
     # ── Ensemble signal & confidence ──
     # Weight: 60% LSTM forecast direction, 40% XGBoost classification
@@ -361,6 +362,7 @@ async def run_prediction(ticker: str) -> dict:
         sma_50=sma_50,
         chart_data=chart_data,
         forecast_data=[asdict(fp) for fp in forecast_data],
+        signal_source=xgb_source,
     )
 
     payload = {

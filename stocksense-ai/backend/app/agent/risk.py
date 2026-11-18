@@ -41,6 +41,7 @@ class RiskLimits:
     min_hit_rate: float = 0.35
     kill_switch_path: str = DEFAULT_KILL_SWITCH
     # Size against a conservative executable price: limit aggression + slippage.
+    require_model_signal: bool = True    # no new positions on the rule-based fallback
     exec_buffer_pct: float = 0.005
     fee_allowance: float = 2.0           # per order, reserved out of cash/risk
 
@@ -189,6 +190,8 @@ class RiskManager:
         halt = self.halt_reason()
         if halt:
             return Decision(False, reason=f"halted: {halt}")
+        if lim.require_model_signal and sig.source == "rule_based":
+            return Decision(False, reason="signal is the rule-based fallback (no trained model)")
         if sig.confidence < lim.min_confidence:
             return Decision(False, reason=f"confidence {sig.confidence:.2f} < {lim.min_confidence:.2f}")
         if sig.ticker in acct.positions:

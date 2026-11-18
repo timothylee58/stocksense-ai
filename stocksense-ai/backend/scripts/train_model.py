@@ -241,6 +241,8 @@ def train_pipeline(ticker: str, n_trials: int = 50, use_mlflow: bool = False, de
     os.makedirs(settings.models_dir, exist_ok=True)
     mp = os.path.join(settings.models_dir, f"xgb_{ticker.upper()}.json")
     final_model.save_model(mp)
+    from app.services.xgboost_service import save_feature_columns
+    save_feature_columns(ticker, list(X.columns))     # inference aligns to exactly these columns
     logger.info("Model saved → %s", mp)
 
     # ── 5. Evaluate on held-out test set ─────────────────────────────────────

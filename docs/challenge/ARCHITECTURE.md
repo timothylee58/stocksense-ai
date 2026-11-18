@@ -39,8 +39,9 @@ Each Qoder agent is a thin operator over a repo command; trading logic stays in 
 | Component | Path | Responsibility |
 |---|---|---|
 | Data layer | `app/data/fetcher.py`, `app/core/ch_store.py` | OHLCV + indicators: Redis (15 min), then ClickHouse, then moomoo (if connected), then yfinance |
-| Prediction | `app/ml/predictor.py`, `app/ml/models/{xgb_model,lstm}.py` | Ensemble signal + confidence + stop suggestion |
-| Explain / backtest | `app/services/xgboost_service.py`, `app/services/backtest_service.py`, `scripts/train_model.py` | SHAP, Optuna tuning, walk-forward metrics (binary next-day model) |
+| Prediction | `app/ml/predictor.py`, `app/ml/models/{xgb_model,lstm}.py` | Ensemble signal + confidence + stop suggestion; XGBoost leg = the shared binary model, reported as `signal_source` |
+| Shared XGBoost model | `app/services/xgboost_service.py`, `scripts/train_model.py` | Training (Optuna), `predict_prob_up` (signal), SHAP; one `xgb_<TICKER>.json` + `.features.json` |
+| Backtest | `app/services/backtest_service.py` | Walk-forward metrics on that same model |
 | Signal adapter | `app/agent/loop.py: predictor_source` | `run_prediction` to `TradeSignal` |
 | Risk gate | `app/agent/risk.py` | Pre-trade checks, sizing, halts, invalidation |
 | Broker | `app/agent/broker.py`, `app/agent/moomoo_broker.py` | `Broker` protocol; in-memory sim; Moomoo SIMULATE adapter |
@@ -110,9 +111,9 @@ if their signal failed.
 - In soft drawdown only the risk and per-position size terms are halved; a binding gross-exposure or cash cap is not halved further.
 - The report never mixes brokers: `--date` merges every run of one broker on that day (a paper account is one continuous equity curve; simulator runs each restart at $100k, so they are measured per run with return compounded and drawdown = worst run, and the report says so). Partial-exit PnL for a position closed outside the agent is dropped and logged as `orphaned_partial_pnl`.
 
-See PRD section 8: the model that trades is not the model that is backtested/explained, the
-ensemble weights differ from documentation, and the Moomoo adapter is untested against a real
-OpenD. Bursa tickers need a Moomoo code mapping.
+See PRD section 8: the ensemble weights (60% LSTM / 40% XGBoost) differ from the documented
+50/30/20, the signal has not been validated on real data, and the Moomoo adapter is untested
+against a real OpenD. Bursa tickers need a Moomoo code mapping.
 
 ## 9. Run it
 
