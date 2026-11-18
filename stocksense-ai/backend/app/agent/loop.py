@@ -27,10 +27,22 @@ class TradingAgent:
                  state_path: str | None = None):
         self.broker, self.risk, self.ledger, self.source = broker, risk, ledger, source
         self.state_path = state_path
+        self.state_ok = True      # False while risk state cannot be saved: entries fail closed
 
     def _persist(self) -> None:
-        if self.state_path:
+        """Save risk state. A write failure must never stop exits: log it and block new entries."""
+        if not self.state_path:
+            return
+        try:
             self.risk.save(self.state_path)
+            self.state_ok = True
+        except OSError as exc:
+            self.state_ok = False
+            logger.error("cannot persist risk state to %s: %s", self.state_path, exc)
+            try:
+                self.ledger.write("risk_event", action="state_persist_failed", error=str(exc))
+            except OSError:
+                pass
 
     def _sell(self, ticker: str, price: float, reason: str) -> bool:
         """Sell the whole position. Returns True only if the position is gone."""
@@ -66,11 +78,13 @@ class TradingAgent:
 
         It is keyed by ticker only, so keeping it would leak into the next round trip.
         """
-        for t in [t for t in self.risk.open_trade_pnl if t not in acct.positions]:
+        orphans = [t for t in self.risk.open_trade_pnl if t not in acct.positions]
+        for t in orphans:
             lost = self.risk.open_trade_pnl.pop(t)
             self.ledger.write("risk_event", action="orphaned_partial_pnl", ticker=t, pnl=lost,
                               note="position closed outside the agent; PnL not carried forward")
-        self._persist()
+        if orphans:
+            self._persist()
 
     def _mark(self, phase: str) -> None:
         acct = self.broker.get_account()
@@ -131,6 +145,10 @@ class TradingAgent:
                 return
 
             # 2) entries, most confident first; never re-buy what we just sold
+            if not self.state_ok:
+                self.ledger.write("risk_event", action="entries_blocked",
+                                  reason="risk state is not being saved")
+                return
             for s in sorted((x for x in signals if x.action == "BUY"), key=lambda x: -x.confidence):
                 if s.ticker in sold:
                     self.ledger.write("decision", ticker=s.ticker, action="BUY", approved=False,

@@ -31,13 +31,41 @@ def select(events: list[dict], run_id: str | None = None, date: str | None = Non
     return [e for e in events if e.get("run_id") == latest] if latest else events
 
 
-def summarise(events: list[dict]) -> dict:
-    eq = [e["equity"] for e in events if e["event"] == "equity"]
+def _curve_stats(events: list[dict]) -> tuple[float | None, float | None, float | None, float]:
+    """(start, end, return_pct, max_drawdown_pct) of one continuous equity curve."""
+    eq = [e["equity"] for e in events if e["event"] == "equity" and e.get("equity") is not None]
     peak, max_dd = 0.0, 0.0
     for v in eq:
         peak = max(peak, v)
         if peak > 0:
             max_dd = max(max_dd, (peak - v) / peak)
+    ret = (eq[-1] / eq[0] - 1) * 100 if len(eq) > 1 and eq[0] else None
+    return (eq[0] if eq else None), (eq[-1] if eq else None), ret, max_dd * 100
+
+
+def _equity_summary(events: list[dict]) -> dict:
+    """One paper account is a single curve. Simulator runs each restart at $100k, so they are
+    measured per run (return compounded, drawdown = worst run) instead of being chained."""
+    runs: dict[str, list[dict]] = {}
+    for e in events:
+        runs.setdefault(e.get("run_id") or "", []).append(e)
+    is_sim = any(e.get("broker") == "sim" for e in events)
+    if len(runs) <= 1 or not is_sim:
+        start, end, ret, dd = _curve_stats(events)
+        return {"start_equity": start, "end_equity": end, "return_pct": ret,
+                "max_drawdown_pct": dd, "equity_note": None}
+    stats = [_curve_stats(r) for r in runs.values()]
+    growth = 1.0
+    for _, _, r, _ in stats:
+        growth *= 1 + (r or 0.0) / 100
+    return {"start_equity": stats[0][0], "end_equity": stats[-1][1],
+            "return_pct": (growth - 1) * 100,
+            "max_drawdown_pct": max(d for *_, d in stats),
+            "equity_note": f"{len(runs)} simulator runs measured separately (each restarts at start equity)"}
+
+
+def summarise(events: list[dict]) -> dict:
+    eqs = _equity_summary(events)
     fills = [e for e in events if e["event"] == "fill"]
     # a closed trade is a round trip that reached zero; its PnL is summed over partial fills
     closed = [f for f in fills if f.get("closed") and f.get("trade_pnl") is not None]
@@ -46,10 +74,7 @@ def summarise(events: list[dict]) -> dict:
     decisions = [e for e in events if e["event"] == "decision"]
     rejects = Counter(d["reason"] for d in decisions if not d.get("approved"))
     return {
-        "start_equity": eq[0] if eq else None,
-        "end_equity": eq[-1] if eq else None,
-        "return_pct": (eq[-1] / eq[0] - 1) * 100 if len(eq) > 1 and eq[0] else None,
-        "max_drawdown_pct": max_dd * 100,
+        **eqs,
         "n_fills": len(fills),
         "n_closed_trades": len(sells),
         "realized_pnl": sum(f["trade_pnl"] for f in closed),
@@ -77,6 +102,7 @@ def to_markdown(s: dict) -> str:
         f"| Realized PnL | {_fmt(s['realized_pnl'], ',.2f')} |",
         f"| Win rate | {_fmt(s['win_rate_pct'], '.0f', '%')} |",
         f"| Decisions (approved/total) | {s['n_approved']}/{s['n_decisions']} |",
+        *(["", f"_{s['equity_note']}_"] if s.get("equity_note") else []),
         "", "## Why trades were rejected", "",
     ]
     lines += [f"- {n}x {r}" for r, n in s["top_rejections"]] or ["- none"]

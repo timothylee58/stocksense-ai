@@ -415,3 +415,78 @@ def test_sim_broker_rejects_non_finite_inputs_and_updates_stop_on_add_on():
     b.place_order("X", "BUY", 5, 100.0, stop_loss=90.0)
     b.place_order("X", "BUY", 5, 100.0, stop_loss=95.0)
     assert b.get_account().positions["X"].stop_loss == 95.0
+
+
+# ── sixth review round ───────────────────────────────────────────────────────
+def _broken_save(*_a, **_k):
+    raise OSError("disk full")
+
+
+def test_unwritable_risk_state_never_blocks_exits_and_blocks_entries(tmp_path):
+    r = rm()
+    r.save = _broken_save                 # state file cannot be written
+
+    async def stop_out():
+        return [sig(p=90.0, a="HOLD")]
+    a = TradingAgent(_Sim(), r, Ledger(str(tmp_path / "l.jsonl")), stop_out,
+                     state_path=str(tmp_path / "risk.json"))
+    a.broker.place_order("NVDA", "BUY", 10, 100.0, 95.0)
+    asyncio.run(a.run_cycle())
+    assert "NVDA" not in a.broker.get_account().positions        # the stop still fired
+    assert a.state_ok is False
+    assert any(e.get("action") == "state_persist_failed" for e in a.ledger.read())
+
+    async def buy():
+        return [sig()]
+    a.source = buy
+    asyncio.run(a.run_cycle())                                    # next cycle: entries fail closed
+    assert "NVDA" not in a.broker.get_account().positions
+    assert any(e.get("action") == "entries_blocked" for e in a.ledger.read())
+
+
+def test_kill_switch_flatten_survives_unwritable_state(tmp_path):
+    r = rm()
+    r.manual_kill = True
+    r.save = _broken_save
+
+    async def src():
+        return [sig(a="HOLD")]
+    a = TradingAgent(_Sim(), r, Ledger(str(tmp_path / "l.jsonl")), src,
+                     state_path=str(tmp_path / "risk.json"))
+    a.broker.place_order("NVDA", "BUY", 10, 100.0, 95.0)
+    asyncio.run(a.run_cycle())
+    assert not a.broker.get_account().positions
+
+
+def test_reconcile_does_not_write_when_nothing_changed(tmp_path):
+    r = rm()
+    calls = []
+    r.save = lambda *_a, **_k: calls.append(1)
+
+    async def src():
+        return [sig(a="HOLD")]
+    a = TradingAgent(_Sim(), r, Ledger(str(tmp_path / "l.jsonl")), src,
+                     state_path=str(tmp_path / "risk.json"))
+    a._reconcile(a.broker.get_account())
+    assert calls == []                      # nothing orphaned -> no write
+
+
+def test_multi_run_sim_report_does_not_chain_equity_across_runs():
+    from app.agent.report import summarise
+    ev = []
+    for run, (start, end) in {"r1": (100_000, 101_000), "r2": (100_000, 100_500)}.items():
+        for v in (start, end):
+            ev.append({"event": "equity", "run_id": run, "broker": "sim", "equity": v})
+    s = summarise(ev)
+    assert s["max_drawdown_pct"] == 0                      # the reset between runs is not a loss
+    assert s["return_pct"] == pytest.approx((1.01 * 1.005 - 1) * 100)
+    assert "2 simulator runs" in s["equity_note"]
+
+
+def test_moomoo_multi_run_report_is_one_continuous_curve():
+    from app.agent.report import summarise
+    ev = [{"event": "equity", "run_id": r, "broker": "moomoo", "equity": v}
+          for r, v in (("a", 100_000), ("a", 105_000), ("b", 99_750), ("b", 103_000))]
+    s = summarise(ev)
+    assert s["max_drawdown_pct"] == pytest.approx(5.0)     # 105k peak -> 99.75k across runs
+    assert s["equity_note"] is None

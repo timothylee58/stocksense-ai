@@ -99,13 +99,14 @@ if their signal failed.
 | Order not filled in time | Cancelled, final fill state re-polled; failures logged as `order_rejected` (buys and sells) |
 | ClickHouse down | Falls back to Redis/yfinance |
 | Process restart | Stops and risk state persist (Moomoo broker) |
+| Risk-state file unwritable | Exits and flatten still run; failure is logged (`state_persist_failed`); new entries are blocked until the state can be saved again |
 
 ## 8. Known gaps
 
 - **Commission on Moomoo fills is reported as 0 and sell PnL is gross**, because the order API call used does not return fees. Closed-trade PnL, invalidation and win rate are therefore slightly optimistic on the Moomoo path (the sim broker includes costs). Querying fees is a follow-up.
 - Invalidation latches until a human resets it (`logs/risk_state.json` for Moomoo; delete the file or `reset_invalidation()`).
 - In soft drawdown only the risk and per-position size terms are halved; a binding gross-exposure or cash cap is not halved further.
-- The report never mixes brokers: `--date` merges every run of one broker on that day (sim runs each restart at $100k, so a multi-run sim day is not a continuous curve). Partial-exit PnL for a position closed outside the agent is dropped and logged as `orphaned_partial_pnl`.
+- The report never mixes brokers: `--date` merges every run of one broker on that day (a paper account is one continuous equity curve; simulator runs each restart at $100k, so they are measured per run with return compounded and drawdown = worst run, and the report says so). Partial-exit PnL for a position closed outside the agent is dropped and logged as `orphaned_partial_pnl`.
 
 See PRD section 8: the model that trades is not the model that is backtested/explained, the
 ensemble weights differ from documentation, and the Moomoo adapter is untested against a real
