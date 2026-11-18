@@ -27,30 +27,39 @@ class TradingAgent:
                  state_path: str | None = None):
         self.broker, self.risk, self.ledger, self.source = broker, risk, ledger, source
         self.state_path = state_path
-        self._trade_pnl: dict[str, float] = {}   # realized PnL of the open round trip
+
+    def _persist(self) -> None:
+        if self.state_path:
+            self.risk.save(self.state_path)
 
     def _sell(self, ticker: str, price: float, reason: str) -> bool:
         """Sell the whole position. Returns True only if the position is gone."""
         pos = self.broker.get_account().positions.get(ticker)
         if not pos:
             return True
-        fill = self.broker.place_order(ticker, "SELL", pos.qty, price)
+        qty_before = pos.qty        # brokers may mutate `pos` in place
+        fill = self.broker.place_order(ticker, "SELL", qty_before, price)
         if not fill:
             self.ledger.write("risk_event", action="order_rejected", side="SELL",
                               ticker=ticker, reason=reason)
             return False
-        if fill.realized_pnl is not None:
-            self._trade_pnl[ticker] = self._trade_pnl.get(ticker, 0.0) + fill.realized_pnl
-        left = self.broker.get_account().positions.get(ticker)
-        closed = left is None
-        trade_pnl = self._trade_pnl.pop(ticker, 0.0) if closed else None
-        self.ledger.write("fill", reason=reason, closed=closed, trade_pnl=trade_pnl,
-                          remaining=0.0 if closed else left.qty, **fill.__dict__)
+        # closure comes from the confirmed fill quantity, not a second account read
+        remaining = max(qty_before - fill.qty, 0.0)
+        closed = remaining <= 1e-9
+        pnl = self.risk.open_trade_pnl.get(ticker, 0.0) + (fill.realized_pnl or 0.0)
+        trade_pnl = None
         if closed:   # one closed trade per round trip; partial fills were summed
-            self.risk.record_closed_trade(trade_pnl)
-            return True
-        self.ledger.write("risk_event", action="partial_exit", ticker=ticker, remaining=left.qty)
-        return False
+            self.risk.open_trade_pnl.pop(ticker, None)
+            self.risk.record_closed_trade(pnl)
+            trade_pnl = pnl
+        else:
+            self.risk.open_trade_pnl[ticker] = pnl
+        self._persist()      # durable before anything else can fail
+        self.ledger.write("fill", reason=reason, closed=closed, trade_pnl=trade_pnl,
+                          remaining=remaining, **fill.__dict__)
+        if not closed:
+            self.ledger.write("risk_event", action="partial_exit", ticker=ticker, remaining=remaining)
+        return closed
 
     def _mark(self, phase: str) -> None:
         acct = self.broker.get_account()
@@ -128,9 +137,10 @@ class TradingAgent:
                 else:
                     self.ledger.write("risk_event", action="order_rejected", side="BUY", ticker=s.ticker)
         finally:
-            self._mark("post")                      # report sees fills and costs
-            if self.state_path:
-                self.risk.save(self.state_path)
+            try:
+                self._mark("post")                  # report sees fills and costs
+            finally:
+                self._persist()                     # saved even if the account read fails
 
 
 def predictor_source(tickers: list[str]) -> SignalSource:

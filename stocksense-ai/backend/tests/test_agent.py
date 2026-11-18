@@ -286,3 +286,73 @@ def test_report_isolates_runs_and_counts_round_trips(tmp_path):
     assert len(select(ev)) < len(ev)                          # latest run only
     assert summarise(select(ev))["start_equity"] == 100_000   # not mixed with the other run
     assert select(ev, date="1999-01-01") == []
+
+
+# ── third review round ───────────────────────────────────────────────────────
+class _HalfOnce(_Sim):
+    """Sells half the first time, everything afterwards."""
+    def __init__(self):
+        super().__init__()
+        self.first = True
+
+    def place_order(self, ticker, side, qty, price, stop_loss=None):
+        if side == "SELL" and self.first:
+            self.first = False
+            qty = qty / 2
+        return super().place_order(ticker, side, qty, price, stop_loss)
+
+
+def test_partial_exit_pnl_survives_restart(tmp_path):
+    state = str(tmp_path / "risk.json")
+    b = _HalfOnce()
+    b.place_order("NVDA", "BUY", 10, 100.0, 95.0)
+
+    async def lose():
+        return [sig(p=90.0, a="HOLD")]      # below the 95 stop: sell at a loss
+
+    a1 = TradingAgent(b, rm(), Ledger(str(tmp_path / "l.jsonl")), lose, state_path=state)
+    asyncio.run(a1.run_cycle())
+    assert a1.risk.closed_pnls == [] and a1.risk.open_trade_pnl["NVDA"] < 0
+
+    async def gain():
+        return [sig(p=120.0, a="SELL")]     # remainder sold at a gain
+
+    r2 = RiskManager(RiskLimits(kill_switch_path="/nonexistent/KS"))
+    assert r2.load(state)
+    a2 = TradingAgent(b, r2, Ledger(str(tmp_path / "l2.jsonl")), gain, state_path=state)
+    asyncio.run(a2.run_cycle())
+    assert len(r2.closed_pnls) == 1
+    f1 = [e for e in a1.ledger.read() if e["event"] == "fill"][0]["realized_pnl"]
+    f2 = [e for e in a2.ledger.read() if e["event"] == "fill"][0]["realized_pnl"]
+    assert f1 < 0 < f2
+    assert r2.closed_pnls[0] == pytest.approx(f1 + f2)   # whole round trip, not just the last leg
+    assert r2.open_trade_pnl == {}
+
+
+class _BreaksAfterSell(_Sim):
+    broken = False
+
+    def place_order(self, *a, **kw):
+        f = super().place_order(*a, **kw)
+        if a[1] == "SELL" and f:
+            self.broken = True
+        return f
+
+    def get_account(self):
+        if self.broken:
+            raise RuntimeError("account read failed")
+        return super().get_account()
+
+
+def test_closed_loss_is_saved_even_if_account_read_fails(tmp_path):
+    state = str(tmp_path / "risk.json")
+    b = _BreaksAfterSell()
+    b.place_order("NVDA", "BUY", 10, 100.0, 95.0)
+
+    async def src():
+        return [sig(p=90.0, a="HOLD")]
+    a = TradingAgent(b, rm(), Ledger(str(tmp_path / "l.jsonl")), src, state_path=state)
+    with pytest.raises(RuntimeError):
+        asyncio.run(a.run_cycle())
+    r2 = RiskManager(RiskLimits(kill_switch_path="/nonexistent/KS"))
+    assert r2.load(state) and len(r2.closed_pnls) == 1 and r2.closed_pnls[0] < 0

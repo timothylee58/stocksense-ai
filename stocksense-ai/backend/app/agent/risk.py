@@ -70,6 +70,7 @@ class RiskManager:
     closed_pnls: list[float] = field(default_factory=list)
     manual_kill: bool = False
     invalidated: str | None = None      # latched until a human resets it
+    open_trade_pnl: dict = field(default_factory=dict)   # realized PnL of partly-closed trades
     _equity: float = 0.0
 
     # ── persistence (survive restarts) ───────────────────────────────────────
@@ -83,7 +84,8 @@ class RiskManager:
                        "day": self.day.isoformat() if self.day else None,
                        "day_start_equity": self.day_start_equity,
                        "closed_pnls": self.closed_pnls[-200:],
-                       "invalidated": self.invalidated}, f)
+                       "invalidated": self.invalidated,
+                       "open_trade_pnl": self.open_trade_pnl}, f)
         os.replace(tmp, path)
 
     def load(self, path: str) -> bool:
@@ -95,6 +97,7 @@ class RiskManager:
             self.day_start_equity = float(st["day_start_equity"])
             self.closed_pnls = [float(x) for x in st.get("closed_pnls", [])]
             self.invalidated = st.get("invalidated")
+            self.open_trade_pnl = {k: float(v) for k, v in st.get("open_trade_pnl", {}).items()}
             return True
         except (OSError, ValueError, KeyError):
             return False

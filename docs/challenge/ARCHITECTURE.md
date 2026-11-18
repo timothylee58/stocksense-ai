@@ -62,7 +62,7 @@ Each Qoder agent is a thin operator over a repo command; trading logic stays in 
 Checks run in order for each entry: halt conditions (kill switch, hard drawdown, daily loss,
 invalidation), confidence floor, already-held, max positions, price validity, then sizing.
 Quantity = floor(min(risk-to-stop size, per-position cap, remaining gross-exposure room, cash)),
-halved when drawdown >= 5%. Limits live in `RiskLimits` (defaults in the PRD).
+halved (risk-to-stop and per-position terms only) when drawdown >= 5%. Limits live in `RiskLimits` (defaults in the PRD).
 
 State that matters: peak equity, day-start equity, list of closed-trade PnLs. With
 `--broker moomoo` these are saved to `logs/risk_state.json` after every cycle and restored at
