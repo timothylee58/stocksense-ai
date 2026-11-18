@@ -68,8 +68,9 @@ def _equity_summary(events: list[dict]) -> dict:
         start, end, ret, dd = _curve_stats(events)
         return {"start_equity": start, "end_equity": end, "return_pct": ret,
                 "max_drawdown_pct": dd, "equity_note": None}
-    stats = [st for st in (_curve_stats(r) for r in runs.values()) if st[0] is not None]
-    if not stats:                       # runs exist but none logged an equity mark
+    # only runs with a computed return (>= 2 equity marks) count toward the compounded result
+    stats = [st for st in (_curve_stats(r) for r in runs.values()) if st[2] is not None]
+    if not stats:                       # no run has two equity marks, so no return can be computed
         return {"start_equity": None, "end_equity": None, "return_pct": None,
                 "max_drawdown_pct": None, "equity_note": None}
     growth = 1.0
