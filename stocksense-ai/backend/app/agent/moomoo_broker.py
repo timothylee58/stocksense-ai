@@ -79,6 +79,7 @@ class MoomooSimBroker:
         with open(tmp, "w", encoding="utf-8") as f:     # atomic: never leave half a file
             json.dump(self._stops, f)
         os.replace(tmp, self.state_path)
+        self.stops_unsaved = False      # the whole in-memory stop map is now durable
 
     def _ok(self, ret: Any, data: Any, what: str) -> bool:
         if ret == self._m.RET_OK:

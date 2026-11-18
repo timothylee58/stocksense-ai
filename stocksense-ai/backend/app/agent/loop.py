@@ -29,6 +29,9 @@ class TradingAgent:
         self.broker, self.risk, self.ledger, self.source = broker, risk, ledger, source
         self.state_path = state_path
         self.state_ok = True      # False while risk state cannot be saved: entries fail closed
+        # audit-trail health is tracked apart from state_ok so a successful risk-state save can
+        # never clear it; once a ledger write is lost, entries stay blocked until restart
+        self.ledger_ok = True
         # a failed save in an earlier process may have lost a closed trade: needs a human ack
         self.unresolved_failure = bool(state_path) and ledger.unresolved_state_failure(ledger.broker)
         # the state file exists but cannot be loaded: never overwrite it, hold entries for a human
@@ -40,8 +43,26 @@ class TradingAgent:
         try:
             self.ledger.write(event, **fields)
         except OSError as exc:
-            self.state_ok = False
+            self.ledger_ok = False
             logger.error("ledger write failed (%s): %s", event, exc)
+
+    def _entry_block_reason(self) -> str | None:
+        """Why new entries must not be placed right now (exits and flatten are never blocked)."""
+        if self.state_unreadable:
+            return "risk state file is unreadable; repair or remove it"
+        if self.unresolved_failure:
+            return "an earlier risk-state save failed; reconcile, then run with --ack-state-failure"
+        if not self.state_ok:
+            return "risk state is not being saved"
+        if not self.ledger_ok:
+            return "an audit-ledger write failed; entries stay blocked until the ledger is repaired and the agent restarted"
+        if getattr(self.broker, "stops_unsaved", False):
+            return "stop-loss state could not be saved; restore it before opening more positions"
+        if hasattr(self.broker, "stops_unsaved"):        # broker that tracks stops itself (Moomoo)
+            bare = [t for t, p in self.broker.get_account().positions.items() if p.stop_loss is None]
+            if bare:
+                return f"position(s) without a stop-loss: {', '.join(sorted(bare))}"
+        return None
 
     def _persist(self) -> None:
         """Save risk state. A write failure must never stop exits: log it and block new entries."""
@@ -163,30 +184,30 @@ class TradingAgent:
                 return
 
             # 2) entries, most confident first; never re-buy what we just sold
-            if not self.state_ok or self.unresolved_failure or self.state_unreadable:
-                self._log(
-                    "risk_event", action="entries_blocked",
-                    reason=("risk state file is unreadable; repair or remove it" if self.state_unreadable
-                            else "an earlier risk-state save failed; reconcile, then run with "
-                                 "--ack-state-failure" if self.unresolved_failure
-                            else "risk state is not being saved"))
+            blocked = self._entry_block_reason()
+            if blocked:
+                self._log("risk_event", action="entries_blocked", reason=blocked)
                 return
             for s in sorted((x for x in signals if x.action == "BUY"), key=lambda x: -x.confidence):
                 if s.ticker in sold:
                     self._log("decision", ticker=s.ticker, action="BUY", approved=False,
                                       reason="sold earlier this cycle")
                     continue
+                blocked = self._entry_block_reason()          # recheck: an earlier order may have
+                if blocked:                                   # left stops or the ledger unsaved
+                    self._log("risk_event", action="entries_blocked", reason=blocked)
+                    break
                 acct = self.broker.get_account()
                 d = self.risk.evaluate_entry(s, acct)
                 self._log("decision", ticker=s.ticker, action="BUY", approved=d.approved,
                                   qty=d.qty, reason=d.reason, confidence=s.confidence, price=s.price)
                 if not d.approved:
                     continue
+                if not self.ledger_ok:        # the decision itself could not be recorded
+                    break
                 stop = effective_stop(s, self.risk.limits)   # same stop as used for sizing
                 fill = self.broker.place_order(s.ticker, "BUY", d.qty, s.price, stop)
                 if fill:
-                    if getattr(self.broker, "stops_unsaved", False):
-                        self.state_ok = False       # stop file unwritable: hold further entries
                     self.risk.open_trade_pnl.pop(s.ticker, None)   # a new round trip starts clean
                     self._log("fill", reason="entry", stop_loss=stop, **fill.__dict__)
                 else:

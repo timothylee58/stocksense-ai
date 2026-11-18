@@ -148,3 +148,18 @@ def test_backtest_uses_aligned_columns_and_the_trading_threshold(models_dir, mon
     monkeypatch.setattr(bt.get_settings(), "direction_threshold", 1.01)   # nothing clears the bar
     res = bt.run_backtest(df, "TST")
     assert all(pt["strategy"] == pytest.approx(1.0) for pt in res["equity_curve"])   # always flat
+
+
+def test_model_swapped_after_metadata_is_never_trusted(models_dir, monkeypatch):
+    real = make_df(seed=0)
+    svc.train_xgboost(real, "TST")
+    assert svc.signal_source("TST") == "xgb_binary"
+    # a demo retrain replaces the model file but the real-data metadata is still on disk
+    other = models_dir / "other.json"
+    monkeypatch.setattr(svc.settings, "demo_mode", True)
+    svc.train_xgboost(make_df(seed=5), "OTH")
+    (models_dir / "xgb_OTH.json").replace(models_dir / "xgb_TST.json")
+    assert other.exists() is False
+    assert svc.signal_source("TST") == "xgb_unverified"
+    assert svc.predict_prob_up(real, "TST") is None
+    assert xgb_model.predict_xgb_with_source(real, "TST")[2] in ("rule_based", "xgb_unverified")

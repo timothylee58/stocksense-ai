@@ -40,7 +40,7 @@ Each Qoder agent is a thin operator over a repo command; trading logic stays in 
 |---|---|---|
 | Data layer | `app/data/fetcher.py`, `app/core/ch_store.py` | OHLCV + indicators: Redis (15 min), then ClickHouse, then moomoo (if connected), then yfinance |
 | Prediction | `app/ml/predictor.py`, `app/ml/models/{xgb_model,lstm}.py` | Ensemble signal + confidence + stop suggestion; XGBoost leg = the shared binary model, reported as `signal_source` |
-| Shared XGBoost model | `app/services/xgboost_service.py`, `scripts/train_model.py` | Training (Optuna), `predict_prob_up` (signal), SHAP; one `xgb_<TICKER>.json` + `.features.json` (columns + `demo` flag + timestamp, published together; every consumer aligns to those columns and refuses data that lacks one, never zero-filling) |
+| Shared XGBoost model | `app/services/xgboost_service.py`, `scripts/train_model.py` | Training (Optuna), `predict_prob_up` (signal), SHAP; one `xgb_<TICKER>.json` + `.features.json` (columns + `demo` flag + SHA-256 of the model file, so a model and metadata from different runs are never paired: a mismatch reports `xgb_unverified`; every consumer aligns to those columns and refuses data that lacks one, never zero-filling) |
 | Backtest | `app/services/backtest_service.py` | Walk-forward metrics on that same model, same feature alignment and the same `direction_threshold` entry rule as the signal (it measures the raw XGBoost leg, not the full ensemble or the risk gate) |
 | Signal adapter | `app/agent/loop.py: predictor_source` | `run_prediction` to `TradeSignal` |
 | Risk gate | `app/agent/risk.py` | Pre-trade checks, sizing, halts, invalidation |
@@ -103,6 +103,8 @@ if their signal failed.
 | Process restart | Stops and risk state persist (Moomoo broker) |
 | Ledger line damaged (interrupted write) | Moomoo broker: skipped on read; counts as an unresolved state failure, so entries are held until `--ack-state-failure`; exits and flatten still run. The next write starts on a fresh line |
 | Risk-state file exists but unreadable | Never overwritten; entries held; `--ack-state-failure` is refused until it is repaired or removed |
+| Audit-ledger write fails | Latched for the run: new entries stop (exits and flatten still run); restart after repairing the ledger. The risk-state save cannot clear it |
+| Stop-loss file unwritable (Moomoo) | The fill is still recorded; entries are held until the stops save again, and after a restart while any held position has no recorded stop |
 | Risk-state file unwritable | Probed before the first order of each run. Exits and flatten still run; failure is logged (`state_persist_failed`); new entries are blocked until the state can be saved again. A failure from an earlier process also blocks entries until a human reconciles and restarts with `--ack-state-failure` (a lost save can mean a closed loss is missing from the saved history) |
 
 ## 8. Known gaps

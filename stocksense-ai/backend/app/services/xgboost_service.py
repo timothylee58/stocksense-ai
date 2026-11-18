@@ -1,6 +1,7 @@
 """Stage 2 — XGBoost direction classifier."""
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import math
@@ -34,18 +35,28 @@ def save_feature_columns(ticker: str, columns: list[str], demo: bool | None = No
 
     `demo` defaults to the backend's DEMO_MODE. Only a model recorded as demo=False is allowed
     to drive trades; see `signal_source`."""
-    _write_meta(ticker, columns, settings.demo_mode if demo is None else demo)
+    _write_meta(ticker, columns, settings.demo_mode if demo is None else demo,
+                sha256=_file_sha256(_model_path(ticker)))
 
 
 def _meta_tmp(ticker: str) -> str:
     return _features_path(ticker) + ".tmp"
 
 
-def _write_meta(ticker: str, columns: list[str], demo: bool, publish: bool = True) -> None:
+def _file_sha256(path: str) -> str:
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(1 << 20), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def _write_meta(ticker: str, columns: list[str], demo: bool, sha256: str,
+                publish: bool = True) -> None:
     os.makedirs(settings.models_dir, exist_ok=True)
     tmp = _meta_tmp(ticker)
     with open(tmp, "w", encoding="utf-8") as f:
-        json.dump({"columns": list(columns), "demo": bool(demo),
+        json.dump({"columns": list(columns), "demo": bool(demo), "sha256": sha256,
                    "trained_at": datetime.now(UTC).isoformat()}, f)
     if publish:
         os.replace(tmp, _features_path(ticker))
@@ -67,7 +78,18 @@ def _load_meta(ticker: str) -> dict | None:
         return None
     if not isinstance(cols, list) or not all(isinstance(c, str) for c in cols):
         return None
-    return {"columns": cols, "demo": demo if isinstance(demo, bool) else None}
+    sha = raw.get("sha256") if isinstance(raw, dict) else None
+    return {"columns": cols, "demo": demo if isinstance(demo, bool) else None,
+            "sha256": sha if isinstance(sha, str) else None}
+
+
+def _pair_matches(ticker: str, meta: dict) -> bool:
+    """True only if the metadata was written for exactly this model file, so a retrain can
+    never leave a model labelled with another run's provenance or columns."""
+    try:
+        return bool(meta.get("sha256")) and meta["sha256"] == _file_sha256(_model_path(ticker))
+    except OSError:
+        return False
 
 
 def signal_source(ticker: str) -> str:
@@ -75,7 +97,7 @@ def signal_source(ticker: str) -> str:
     data; "xgb_demo" for synthetic training data; "xgb_unverified" when unknown (legacy
     sidecar or none), so the risk gate can allow-list "xgb_binary" alone."""
     meta = _load_meta(ticker)
-    if meta is None or meta["demo"] is None:
+    if meta is None or meta["demo"] is None or not _pair_matches(ticker, meta):
         return "xgb_unverified"
     return "xgb_demo" if meta["demo"] else "xgb_binary"
 
@@ -87,6 +109,8 @@ def aligned_features(df: pd.DataFrame, ticker: str, model: xgb.XGBClassifier) ->
     X = build_feature_matrix(df, include_anomaly=True)
     meta = _load_meta(ticker)
     if meta:
+        if not _pair_matches(ticker, meta):
+            raise ValueError(f"{ticker}: feature list does not belong to the saved model; retrain")
         missing = [c for c in meta["columns"] if c not in X.columns]
         if missing:
             raise ValueError(f"{ticker}: data lacks model feature(s) {missing}")
@@ -168,7 +192,8 @@ def train_xgboost(df: pd.DataFrame, ticker: str) -> xgb.XGBClassifier:
     mp = _model_path(ticker)
     tmp_model = mp[:-len(".json")] + ".tmp.json"        # XGBoost picks the format by extension
     model.save_model(tmp_model)
-    _write_meta(ticker, list(X.columns), settings.demo_mode, publish=False)
+    _write_meta(ticker, list(X.columns), settings.demo_mode, sha256=_file_sha256(tmp_model),
+                publish=False)
     os.replace(_meta_tmp(ticker), _features_path(ticker))
     os.replace(tmp_model, mp)
     logger.info("XGBoost trained for %s — %d samples, %d features", ticker, len(X), X.shape[1])

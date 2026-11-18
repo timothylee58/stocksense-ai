@@ -715,3 +715,59 @@ def test_gate_can_be_relaxed_explicitly():
     r.mark(100_000, NOW)
     fallback = TradeSignal("NVDA", "BUY", 0.9, 100.0, 95.0, "rule_based")
     assert r.evaluate_entry(fallback, SimBroker().get_account()).approved
+
+
+# ── ledger health and unsaved stops must keep blocking entries ───────────────
+def test_ledger_failure_is_latched_and_not_cleared_by_a_state_save(tmp_path):
+    state = str(tmp_path / "risk.json")
+    led = Ledger(str(tmp_path / "l.jsonl"))
+    real_write, fail = led.write, {"on": True}
+
+    def flaky(event, **kw):
+        if fail["on"] and event == "decision":
+            raise OSError("disk full")
+        return real_write(event, **kw)
+    led.write = flaky
+
+    async def buys():
+        return [sig("AAA"), sig("BBB")]
+    a = TradingAgent(SimBroker(), rm(), led, buys, state_path=state)
+    asyncio.run(a.run_cycle())
+    assert a.broker.get_account().positions == {}        # decision unrecorded: no BUY placed
+    assert a.ledger_ok is False and a.state_ok is True   # the risk-state save did not clear it
+    fail["on"] = False
+    asyncio.run(a.run_cycle())
+    assert a.broker.get_account().positions == {}        # still latched on the next cycle
+
+
+class _StopsUnsaved(SimBroker):
+    stops_unsaved = False
+
+    def place_order(self, *args, **kw):
+        fill = super().place_order(*args, **kw)
+        if fill and fill.side == "BUY":
+            self.stops_unsaved = True
+        return fill
+
+
+def test_unsaved_stop_blocks_further_buys_in_the_same_cycle(tmp_path):
+    async def buys():
+        return [sig("AAA", c=0.9), sig("BBB", c=0.8)]
+    a = TradingAgent(_StopsUnsaved(), rm(), Ledger(str(tmp_path / "l.jsonl")), buys)
+    asyncio.run(a.run_cycle())
+    assert set(a.broker.get_account().positions) == {"AAA"}
+    assert any(e.get("action") == "entries_blocked" and "stop-loss" in e.get("reason", "")
+               for e in a.ledger.read())
+
+
+def test_position_without_a_stop_blocks_entries_after_restart(tmp_path):
+    b = _StopsUnsaved()
+    b.place_order("OLD", "BUY", 10, 100.0)       # position with no stop recorded
+    b.stops_unsaved = False
+
+    async def buys():
+        return [sig("NEW")]
+    a = TradingAgent(b, rm(), Ledger(str(tmp_path / "l.jsonl")), buys)
+    asyncio.run(a.run_cycle())
+    assert "NEW" not in b.get_account().positions
+    assert any("without a stop-loss" in e.get("reason", "") for e in a.ledger.read())
