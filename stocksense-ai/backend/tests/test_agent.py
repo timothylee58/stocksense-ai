@@ -15,7 +15,7 @@ NOW = datetime(2026, 11, 17, tzinfo=timezone.utc)
 
 
 def sig(t="NVDA", a="BUY", c=0.8, p=100.0, stop=95.0):
-    return TradeSignal(t, a, c, p, stop)
+    return TradeSignal(t, a, c, p, stop, source="xgb_binary")
 
 
 def rm(**kw):
@@ -699,11 +699,14 @@ def test_non_finite_account_equity_holds_entries_instead_of_disabling_protection
 def test_rule_based_fallback_signal_cannot_open_a_position():
     fallback = TradeSignal("NVDA", "BUY", 0.9, 100.0, 95.0, "rule_based")
     d = rm().evaluate_entry(fallback, SimBroker().get_account())
-    assert not d.approved and "rule-based" in d.reason
+    assert not d.approved and "verified trained model" in d.reason
     trained = TradeSignal("NVDA", "BUY", 0.9, 100.0, 95.0, "xgb_binary")
     assert rm().evaluate_entry(trained, SimBroker().get_account()).approved
     unknown = TradeSignal("NVDA", "BUY", 0.9, 100.0, 95.0, None)
-    assert rm().evaluate_entry(unknown, SimBroker().get_account()).approved   # source not reported
+    assert not rm().evaluate_entry(unknown, SimBroker().get_account()).approved   # missing source
+    for src in ("xgb_demo", "xgb_unverified", "mystery"):
+        odd = TradeSignal("NVDA", "BUY", 0.9, 100.0, 95.0, src)
+        assert not rm().evaluate_entry(odd, SimBroker().get_account()).approved   # allow-list
 
 
 def test_gate_can_be_relaxed_explicitly():

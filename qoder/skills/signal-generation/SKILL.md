@@ -13,7 +13,9 @@ price and a suggested stop-loss.
 1. Report which source produced each signal (`signal_source` on the prediction). There is one
    XGBoost model, `models/xgb_<TICKER>.json` (binary next-day), shared by the signal, `/api/explain`
    and `/api/backtest`. Without it the XGBoost leg is a rule-based RSI/MACD fallback
-   (`signal_source: "rule_based"`) and the risk gate will not open positions on it. If a model is
+   (`signal_source: "rule_based"`). The risk gate allow-lists `xgb_binary` only: `rule_based`,
+   `xgb_demo` (trained on synthetic data), `xgb_unverified` (no provenance) and a missing source
+   never open a position. If a model is
    missing, say so. Train out-of-band, never inside a trading cycle:
    `DEMO_MODE=false python -m scripts.train_model --ticker <TICKER>` (live data; with `DEMO_MODE=true`
    or `--demo` it trains on synthetic data) or `POST /api/train/<TICKER>`.

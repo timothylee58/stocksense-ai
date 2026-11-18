@@ -46,8 +46,10 @@ def test_training_saves_model_and_feature_list(models_dir):
     df = make_df()
     svc.train_xgboost(df, "TST")
     assert (models_dir / "xgb_TST.json").exists()
-    cols = json.loads((models_dir / "xgb_TST.features.json").read_text())
-    assert cols and set(cols) <= set(DIRECTION_FEATURES)
+    meta = json.loads((models_dir / "xgb_TST.features.json").read_text())
+    assert meta["columns"] and set(meta["columns"]) <= set(DIRECTION_FEATURES)
+    assert meta["demo"] is False and meta["trained_at"]
+    assert not list(models_dir.glob("*.tmp*"))          # temp files are published, not left behind
 
 
 def test_signal_uses_the_same_model_as_explain_and_backtest(models_dir):
@@ -65,16 +67,63 @@ def test_signal_mapping_follows_the_threshold(models_dir, monkeypatch):
     monkeypatch.setattr(xgb_model.settings, "direction_threshold", 0.60)
     for prob, expected in [(0.72, ("BUY", 0.72)), (0.30, ("SELL", 0.70)), (0.52, ("HOLD", 0.52))]:
         monkeypatch.setattr(svc, "predict_prob_up", lambda *_a, p=prob: p)
+        monkeypatch.setattr(svc, "signal_source", lambda _t: "xgb_binary")
         signal, conf, source = xgb_model.predict_xgb_with_source(df, "TST")
         assert (signal, round(conf, 2)) == expected and source == "xgb_binary"
 
 
-def test_inference_aligns_to_saved_columns_with_or_without_anomaly_score(models_dir):
-    train_df = make_df(with_anomaly=True)             # trained WITH anomaly_score (18 features)
-    svc.train_xgboost(train_df, "TST")
-    live_df = make_df(with_anomaly=False, seed=1)     # live data has no anomaly_score column
-    p = svc.predict_prob_up(live_df, "TST")
-    assert p is not None and 0.0 <= p <= 1.0          # missing column is filled, no crash
+def test_missing_trained_column_is_refused_not_fabricated(models_dir):
+    svc.train_xgboost(make_df(with_anomaly=True), "TST")   # trained WITH anomaly_score
+    live_df = make_df(with_anomaly=False, seed=1)          # fetcher data cannot supply it
+    assert svc.predict_prob_up(live_df, "TST") is None     # no zero-filled probability
+    assert xgb_model.predict_xgb_with_source(live_df, "TST")[2] == "rule_based"
+    pytest.importorskip("shap")
+    with pytest.raises(ValueError):                        # explain agrees with the signal
+        svc.shap_explain(live_df, "TST")
+
+
+def test_extra_columns_are_dropped_and_order_follows_the_saved_list(models_dir):
+    svc.train_xgboost(make_df(with_anomaly=False), "TST")  # 17 features
+    p = svc.predict_prob_up(make_df(with_anomaly=True, seed=1), "TST")   # pipeline adds anomaly
+    assert p is not None and 0.0 <= p <= 1.0
+    assert svc.predict_xgboost(make_df(with_anomaly=True, seed=1), "TST")[0] == pytest.approx(p)
+
+
+def test_demo_and_legacy_models_are_not_trusted_signals(models_dir, monkeypatch):
+    df = make_df()
+    monkeypatch.setattr(svc.settings, "demo_mode", True)
+    svc.train_xgboost(df, "TST")
+    assert svc.signal_source("TST") == "xgb_demo"
+    assert xgb_model.predict_xgb_with_source(df, "TST")[2] == "xgb_demo"
+    monkeypatch.setattr(svc.settings, "demo_mode", False)
+    svc.train_xgboost(df, "TST")
+    assert svc.signal_source("TST") == "xgb_binary"
+    (models_dir / "xgb_TST.features.json").write_text(json.dumps(["rsi"]))   # legacy list
+    assert svc.signal_source("TST") == "xgb_unverified"
+
+
+def test_predict_xgboost_never_trains(models_dir):
+    assert svc.predict_xgboost(make_df(), "TST") == (0.5, 0.5)
+    assert not list(models_dir.iterdir())
+
+
+def test_feature_list_that_disagrees_with_the_model_fails_safe(models_dir):
+    svc.train_xgboost(make_df(), "TST")
+    (models_dir / "xgb_TST.features.json").write_text(json.dumps({"columns": ["rsi"], "demo": False}))
+    assert svc.predict_prob_up(make_df(), "TST") is None
+
+
+def test_failed_metadata_write_keeps_the_previous_pair(models_dir, monkeypatch):
+    svc.train_xgboost(make_df(), "TST")
+    before = ((models_dir / "xgb_TST.json").read_bytes(), (models_dir / "xgb_TST.features.json").read_bytes())
+
+    def boom(*_a, **_k):
+        raise OSError("disk full")
+    monkeypatch.setattr(svc, "_write_meta", boom)
+    with pytest.raises(OSError):
+        svc.train_xgboost(make_df(seed=3), "TST")
+    after = ((models_dir / "xgb_TST.json").read_bytes(), (models_dir / "xgb_TST.features.json").read_bytes())
+    assert before == after
 
 
 def test_mismatched_features_without_a_feature_list_fail_safe(models_dir):
@@ -87,3 +136,15 @@ def test_mismatched_features_without_a_feature_list_fail_safe(models_dir):
 def test_a_corrupt_model_file_falls_back_instead_of_breaking(models_dir):
     (models_dir / "xgb_TST.json").write_text("not a model")
     assert xgb_model.predict_xgb_with_source(make_df(), "TST")[2] == "rule_based"
+
+
+def test_backtest_uses_aligned_columns_and_the_trading_threshold(models_dir, monkeypatch):
+    from app.services import backtest_service as bt
+    monkeypatch.setattr(bt, "_model_path", lambda t: str(models_dir / f"xgb_{t}.json"))
+    svc.train_xgboost(make_df(with_anomaly=True), "TST")
+    with pytest.raises(ValueError):                         # same refusal as signal and explain
+        bt.run_backtest(make_df(with_anomaly=False, seed=1), "TST")
+    df = make_df(with_anomaly=True, seed=1)
+    monkeypatch.setattr(bt.get_settings(), "direction_threshold", 1.01)   # nothing clears the bar
+    res = bt.run_backtest(df, "TST")
+    assert all(pt["strategy"] == pytest.approx(1.0) for pt in res["equity_curve"])   # always flat

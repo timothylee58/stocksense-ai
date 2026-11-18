@@ -40,8 +40,8 @@ Each Qoder agent is a thin operator over a repo command; trading logic stays in 
 |---|---|---|
 | Data layer | `app/data/fetcher.py`, `app/core/ch_store.py` | OHLCV + indicators: Redis (15 min), then ClickHouse, then moomoo (if connected), then yfinance |
 | Prediction | `app/ml/predictor.py`, `app/ml/models/{xgb_model,lstm}.py` | Ensemble signal + confidence + stop suggestion; XGBoost leg = the shared binary model, reported as `signal_source` |
-| Shared XGBoost model | `app/services/xgboost_service.py`, `scripts/train_model.py` | Training (Optuna), `predict_prob_up` (signal), SHAP; one `xgb_<TICKER>.json` + `.features.json` |
-| Backtest | `app/services/backtest_service.py` | Walk-forward metrics on that same model |
+| Shared XGBoost model | `app/services/xgboost_service.py`, `scripts/train_model.py` | Training (Optuna), `predict_prob_up` (signal), SHAP; one `xgb_<TICKER>.json` + `.features.json` (columns + `demo` flag + timestamp, published together; every consumer aligns to those columns and refuses data that lacks one, never zero-filling) |
+| Backtest | `app/services/backtest_service.py` | Walk-forward metrics on that same model, same feature alignment and the same `direction_threshold` entry rule as the signal (it measures the raw XGBoost leg, not the full ensemble or the risk gate) |
 | Signal adapter | `app/agent/loop.py: predictor_source` | `run_prediction` to `TradeSignal` |
 | Risk gate | `app/agent/risk.py` | Pre-trade checks, sizing, halts, invalidation |
 | Broker | `app/agent/broker.py`, `app/agent/moomoo_broker.py` | `Broker` protocol; in-memory sim; Moomoo SIMULATE adapter |

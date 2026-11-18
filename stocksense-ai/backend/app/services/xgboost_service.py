@@ -5,6 +5,7 @@ import json
 import logging
 import math
 import os
+from datetime import UTC, datetime
 
 import numpy as np
 import pandas as pd
@@ -27,45 +28,96 @@ def _features_path(ticker: str) -> str:
     return os.path.join(settings.models_dir, f"xgb_{ticker.upper()}.features.json")
 
 
-def save_feature_columns(ticker: str, columns: list[str]) -> None:
-    """Record the exact feature columns (and order) the model was trained on, so inference
-    from any data source lines up with them even when e.g. `anomaly_score` is absent."""
+def save_feature_columns(ticker: str, columns: list[str], demo: bool | None = None) -> None:
+    """Write the model's metadata sidecar atomically: the exact feature columns (and order) it
+    was trained on, and whether the training data was synthetic (`demo`).
+
+    `demo` defaults to the backend's DEMO_MODE. Only a model recorded as demo=False is allowed
+    to drive trades; see `signal_source`."""
+    _write_meta(ticker, columns, settings.demo_mode if demo is None else demo)
+
+
+def _meta_tmp(ticker: str) -> str:
+    return _features_path(ticker) + ".tmp"
+
+
+def _write_meta(ticker: str, columns: list[str], demo: bool, publish: bool = True) -> None:
     os.makedirs(settings.models_dir, exist_ok=True)
-    with open(_features_path(ticker), "w", encoding="utf-8") as f:
-        json.dump(list(columns), f)
+    tmp = _meta_tmp(ticker)
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump({"columns": list(columns), "demo": bool(demo),
+                   "trained_at": datetime.now(UTC).isoformat()}, f)
+    if publish:
+        os.replace(tmp, _features_path(ticker))
 
 
-def _load_feature_columns(ticker: str) -> list[str] | None:
+def _load_meta(ticker: str) -> dict | None:
+    """Sidecar as {"columns": [...], "demo": bool|None}. A legacy list-only file has no
+    provenance (demo None). Returns None if absent or malformed."""
     try:
         with open(_features_path(ticker), encoding="utf-8") as f:
-            cols = json.load(f)
-        return cols if isinstance(cols, list) and all(isinstance(c, str) for c in cols) else None
+            raw = json.load(f)
     except (OSError, ValueError):
         return None
+    if isinstance(raw, list):
+        cols, demo = raw, None
+    elif isinstance(raw, dict):
+        cols, demo = raw.get("columns"), raw.get("demo")
+    else:
+        return None
+    if not isinstance(cols, list) or not all(isinstance(c, str) for c in cols):
+        return None
+    return {"columns": cols, "demo": demo if isinstance(demo, bool) else None}
+
+
+def signal_source(ticker: str) -> str:
+    """Provenance of the saved model: "xgb_binary" only when it is recorded as trained on real
+    data; "xgb_demo" for synthetic training data; "xgb_unverified" when unknown (legacy
+    sidecar or none), so the risk gate can allow-list "xgb_binary" alone."""
+    meta = _load_meta(ticker)
+    if meta is None or meta["demo"] is None:
+        return "xgb_unverified"
+    return "xgb_demo" if meta["demo"] else "xgb_binary"
+
+
+def aligned_features(df: pd.DataFrame, ticker: str, model: xgb.XGBClassifier) -> pd.DataFrame:
+    """Feature matrix in exactly the model's training columns, for every consumer (trading
+    signal, SHAP, backtest, pipeline). Raises ValueError rather than fabricating a column the
+    model was trained on (e.g. `anomaly_score`) when the data cannot supply it."""
+    X = build_feature_matrix(df, include_anomaly=True)
+    meta = _load_meta(ticker)
+    if meta:
+        missing = [c for c in meta["columns"] if c not in X.columns]
+        if missing:
+            raise ValueError(f"{ticker}: data lacks model feature(s) {missing}")
+        if len(meta["columns"]) != model.n_features_in_:
+            raise ValueError(f"{ticker}: feature list ({len(meta['columns'])}) does not match the "
+                             f"model ({model.n_features_in_}); retrain")
+        return X[meta["columns"]]
+    if X.shape[1] != model.n_features_in_:
+        raise ValueError(f"{ticker}: model expects {model.n_features_in_} features, data has "
+                         f"{X.shape[1]} and no feature list was saved")
+    return X
 
 
 def predict_prob_up(df: pd.DataFrame, ticker: str) -> float | None:
     """P(next-day close > today's close) from the trained binary model.
 
     This is the ONE model the trading signal, `/api/explain` and `/api/backtest` all use.
-    Returns None when there is no usable model; it never trains (models are pre-trained
-    artefacts), so callers can fall back and say so.
+    Returns None when there is no usable model (or the data cannot supply its features); it
+    never trains (models are pre-trained artefacts), so callers can fall back and say so.
     """
     mp = _model_path(ticker)
     if not os.path.exists(mp):
         return None
     model = xgb.XGBClassifier()
     model.load_model(mp)
-
-    X = build_feature_matrix(df, include_anomaly=True)
-    if X.empty:
+    try:
+        X = aligned_features(df, ticker, model)
+    except ValueError as exc:
+        logger.warning("%s", exc)
         return None
-    cols = _load_feature_columns(ticker)
-    if cols:
-        X = X.reindex(columns=cols, fill_value=0.0)
-    elif X.shape[1] != model.n_features_in_:
-        logger.warning("%s: model expects %d features, data has %d and no feature list was saved",
-                       ticker, model.n_features_in_, X.shape[1])
+    if X.empty:
         return None
     X_last = X.iloc[[-1]].fillna(0).values.astype(np.float64)
     p = float(model.predict_proba(X_last)[0][1])
@@ -111,8 +163,14 @@ def train_xgboost(df: pd.DataFrame, ticker: str) -> xgb.XGBClassifier:
         verbose=False,
     )
 
-    model.save_model(_model_path(ticker))
-    save_feature_columns(ticker, list(X.columns))
+    # write both artefacts to temp files first, then publish the pair, so a failed write
+    # cannot leave a new model next to another run's feature list
+    mp = _model_path(ticker)
+    tmp_model = mp[:-len(".json")] + ".tmp.json"        # XGBoost picks the format by extension
+    model.save_model(tmp_model)
+    _write_meta(ticker, list(X.columns), settings.demo_mode, publish=False)
+    os.replace(_meta_tmp(ticker), _features_path(ticker))
+    os.replace(tmp_model, mp)
     logger.info("XGBoost trained for %s — %d samples, %d features", ticker, len(X), X.shape[1])
     return model
 
@@ -134,7 +192,7 @@ def shap_explain(df: pd.DataFrame, ticker: str) -> dict:
     model = xgb.XGBClassifier()
     model.load_model(mp)
 
-    X = build_feature_matrix(df, include_anomaly=True).fillna(0)
+    X = aligned_features(df, ticker, model).fillna(0)
     if X.empty:
         raise ValueError("Empty feature matrix")
 
@@ -171,26 +229,9 @@ def shap_explain(df: pd.DataFrame, ticker: str) -> dict:
 
 
 def predict_xgboost(df: pd.DataFrame, ticker: str) -> tuple[float, float]:
-    """
-    Run XGBoost on latest row.
-    Returns (prob_up, prob_down) as floats.
-    Trains model if none exists.
-    """
-    mp = _model_path(ticker)
-    if os.path.exists(mp):
-        model = xgb.XGBClassifier()
-        model.load_model(mp)
-    else:
-        logger.info("No XGBoost model for %s — training now", ticker)
-        model = train_xgboost(df, ticker)
-
-    X = build_feature_matrix(df, include_anomaly=True)
-    if X.empty:
+    """(prob_up, prob_down) for the latest row from the saved model; (0.5, 0.5) when there is
+    no usable model. Inference never trains (models are pre-trained artefacts)."""
+    p = predict_prob_up(df, ticker)
+    if p is None:
         return 0.5, 0.5
-
-    X_last = X.iloc[[-1]].fillna(0)
-    proba = model.predict_proba(X_last.values)[0]
-    # proba = [P(Down), P(Up)]
-    prob_down = float(proba[0])
-    prob_up = float(proba[1])
-    return prob_up, prob_down
+    return p, 1.0 - p

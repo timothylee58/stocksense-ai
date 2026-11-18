@@ -201,8 +201,10 @@ class RiskManager:
         halt = self.halt_reason()
         if halt:
             return Decision(False, reason=f"halted: {halt}")
-        if lim.require_model_signal and sig.source == "rule_based":
-            return Decision(False, reason="signal is the rule-based fallback (no trained model)")
+        if lim.require_model_signal and sig.source != "xgb_binary":
+            # allow-list: a missing, rule-based, demo or unverified source never opens a position
+            return Decision(False, reason=f"signal is not from a verified trained model "
+                                          f"(source={sig.source})")
         if sig.confidence < lim.min_confidence:
             return Decision(False, reason=f"confidence {sig.confidence:.2f} < {lim.min_confidence:.2f}")
         if sig.ticker in acct.positions:

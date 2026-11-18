@@ -21,12 +21,13 @@ settings = get_settings()
 
 
 def predict_xgb_with_source(df: pd.DataFrame, ticker: str) -> tuple[str, float, str]:
-    """Returns (signal, confidence, source); source is "xgb_binary" or "rule_based".
+    """Returns (signal, confidence, source); source is "xgb_binary" (real-data model), "xgb_demo",
+    "xgb_unverified" or "rule_based".
 
     BUY if P(UP) >= direction_threshold, SELL if P(UP) <= 1 - threshold, otherwise HOLD.
     Confidence is the probability of the chosen side (for HOLD, the larger side).
     """
-    from app.services.xgboost_service import predict_prob_up
+    from app.services.xgboost_service import predict_prob_up, signal_source
 
     try:
         p = predict_prob_up(df, ticker)
@@ -37,12 +38,13 @@ def predict_xgb_with_source(df: pd.DataFrame, ticker: str) -> tuple[str, float, 
         signal, conf = _rule_based_signal(df)
         return signal, conf, "rule_based"
 
+    src = signal_source(ticker)       # "xgb_binary" only for a model trained on real data
     thr = settings.direction_threshold
     if p >= thr:
-        return "BUY", p, "xgb_binary"
+        return "BUY", p, src
     if p <= 1 - thr:
-        return "SELL", 1 - p, "xgb_binary"
-    return "HOLD", max(p, 1 - p), "xgb_binary"
+        return "SELL", 1 - p, src
+    return "HOLD", max(p, 1 - p), src
 
 
 def predict_xgb(df: pd.DataFrame, ticker: str) -> tuple[str, float]:
