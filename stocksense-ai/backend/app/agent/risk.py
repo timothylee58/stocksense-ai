@@ -18,6 +18,7 @@ import os
 from dataclasses import dataclass, field
 from datetime import date, datetime
 from pathlib import Path
+from typing import Any
 
 from app.agent.models import Account, TradeSignal
 
@@ -97,14 +98,24 @@ class RiskManager:
                 st = json.load(f)
             if not isinstance(st, dict):
                 return False
-            peak = float(st["peak_equity"])
-            day = date.fromisoformat(st["day"]) if st.get("day") else None
-            day_start = float(st["day_start_equity"])
-            closed = [float(x) for x in st.get("closed_pnls", [])]
-            invalidated = st.get("invalidated")
+            def num(v: Any) -> float:
+                if isinstance(v, bool) or not isinstance(v, (int, float)):
+                    raise TypeError("not a number")
+                return float(v)
+
+            peak = num(st["peak_equity"])
+            day_raw = st["day"]
+            if day_raw is not None and not isinstance(day_raw, str):
+                return False
+            day = date.fromisoformat(day_raw) if day_raw else None
+            day_start = num(st["day_start_equity"])
+            if not isinstance(st["closed_pnls"], list) or not isinstance(st["open_trade_pnl"], dict):
+                return False
+            closed = [num(x) for x in st["closed_pnls"]]
+            invalidated = st["invalidated"]
             if invalidated is not None and not isinstance(invalidated, str):
                 return False
-            open_pnl = {str(k): float(v) for k, v in st.get("open_trade_pnl", {}).items()}
+            open_pnl = {str(k): num(v) for k, v in st["open_trade_pnl"].items()}
             numbers = [peak, day_start, *closed, *open_pnl.values()]
             if not all(math.isfinite(x) for x in numbers) or peak < 0 or day_start < 0:
                 return False       # NaN/inf/negative would silently disable drawdown protection

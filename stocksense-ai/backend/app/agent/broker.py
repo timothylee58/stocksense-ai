@@ -5,6 +5,7 @@ TrdEnv.SIMULATE); the agent never touches broker specifics directly.
 """
 from __future__ import annotations
 
+import math
 from typing import Protocol
 
 from app.agent.models import Account, Fill, Position, Side
@@ -49,8 +50,8 @@ class SimBroker:
                 total = pos.qty + qty
                 pos.avg_price = (pos.avg_price * pos.qty + px * qty + self.commission) / total
                 pos.qty = total
-                if stop_loss:                     # honour the newest stop, like MoomooSimBroker
-                    pos.stop_loss = stop_loss
+                if stop_loss and math.isfinite(stop_loss) and stop_loss > 0:
+                    pos.stop_loss = max(pos.stop_loss or 0.0, stop_loss)   # ratchet up only
             else:
                 a.positions[ticker] = Position(ticker, qty, (px * qty + self.commission) / qty, stop_loss)
             a.prices[ticker] = price

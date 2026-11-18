@@ -680,7 +680,8 @@ def test_non_finite_or_negative_risk_state_is_rejected(tmp_path, bad):
 
 def test_valid_initial_state_with_zero_peak_still_loads(tmp_path):
     p = tmp_path / "risk.json"
-    p.write_text('{"peak_equity": 0, "day_start_equity": 0}')
+    p.write_text('{"peak_equity": 0, "day": null, "day_start_equity": 0, "closed_pnls": [], '
+                 '"invalidated": null, "open_trade_pnl": {}}')
     assert rm().load(str(p)) is True
 
 

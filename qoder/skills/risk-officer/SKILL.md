@@ -20,7 +20,8 @@ audits them. Defaults:
 
 Invalidation latches: once triggered, new entries stay blocked (and this is saved in
 `logs/risk_state.json` for the Moomoo broker) until a human reviews the thesis and resets it
-(delete the state file, or call `RiskManager.reset_invalidation()`). A later winning exit does
+(run the loop once with `--reset-invalidation`, which keeps peak equity and drawdown history;
+deleting the state file also wipes those and is not a reset). A later winning exit does
 not clear it. With the in-memory sim broker nothing persists across processes.
 
 Sizing scope: in soft drawdown the risk and per-position terms are halved; a binding

@@ -5,7 +5,9 @@
 from __future__ import annotations
 
 import argparse
+import math
 from collections import Counter
+from datetime import date as _date
 
 from app.agent.ledger import Ledger
 
@@ -23,7 +25,13 @@ def select(events: list[dict], run_id: str | None = None, date: str | None = Non
     if run_id:
         return [e for e in events if e.get("run_id") == run_id]
     if date:
-        events = [e for e in events if str(e.get("ts", "")).startswith(date)]
+        try:
+            _date.fromisoformat(date)
+            if len(date) != 10:
+                raise ValueError
+        except ValueError:
+            raise ValueError(f"--date must be YYYY-MM-DD, got {date!r}") from None
+        events = [e for e in events if str(e.get("ts", ""))[:10] == date]
         if broker is None and events:
             broker = events[-1].get("broker")
         return [e for e in events if e.get("broker") == broker] if broker else events
@@ -31,16 +39,19 @@ def select(events: list[dict], run_id: str | None = None, date: str | None = Non
     return [e for e in events if e.get("run_id") == latest] if latest else events
 
 
-def _curve_stats(events: list[dict]) -> tuple[float | None, float | None, float | None, float]:
+def _curve_stats(events: list[dict]) -> tuple[float | None, float | None, float | None, float | None]:
     """(start, end, return_pct, max_drawdown_pct) of one continuous equity curve."""
-    eq = [e["equity"] for e in events if e["event"] == "equity" and e.get("equity") is not None]
+    eq = [e["equity"] for e in events if e["event"] == "equity"
+          and isinstance(e.get("equity"), (int, float)) and math.isfinite(e["equity"])]
+    if not eq:
+        return None, None, None, None
     peak, max_dd = 0.0, 0.0
     for v in eq:
         peak = max(peak, v)
         if peak > 0:
             max_dd = max(max_dd, (peak - v) / peak)
     ret = (eq[-1] / eq[0] - 1) * 100 if len(eq) > 1 and eq[0] else None
-    return (eq[0] if eq else None), (eq[-1] if eq else None), ret, max_dd * 100
+    return eq[0], eq[-1], ret, max_dd * 100
 
 
 def _equity_summary(events: list[dict]) -> dict:
@@ -49,7 +60,10 @@ def _equity_summary(events: list[dict]) -> dict:
     runs: dict[str, list[dict]] = {}
     for e in events:
         runs.setdefault(e.get("run_id") or "", []).append(e)
-    is_sim = any(e.get("broker") == "sim" for e in events)
+    brokers = {e.get("broker") for e in events if e.get("broker")}
+    if len(brokers) > 1:
+        raise ValueError(f"events mix brokers {sorted(brokers)}; select one with --broker")
+    is_sim = "sim" in brokers
     if len(runs) <= 1 or not is_sim:
         start, end, ret, dd = _curve_stats(events)
         return {"start_equity": start, "end_equity": end, "return_pct": ret,
@@ -57,15 +71,16 @@ def _equity_summary(events: list[dict]) -> dict:
     stats = [st for st in (_curve_stats(r) for r in runs.values()) if st[0] is not None]
     if not stats:                       # runs exist but none logged an equity mark
         return {"start_equity": None, "end_equity": None, "return_pct": None,
-                "max_drawdown_pct": 0.0, "equity_note": None}
+                "max_drawdown_pct": None, "equity_note": None}
     growth = 1.0
     for _, _, r, _ in stats:
-        growth *= 1 + (r or 0.0) / 100
+        if r is not None:               # a run with one mark has no return; do not count it as 0%
+            growth *= 1 + r / 100
     start = stats[0][0]
     return {"start_equity": start,
             "end_equity": start * growth if start else None,     # consistent with the return
             "return_pct": (growth - 1) * 100,
-            "max_drawdown_pct": max(d for *_, d in stats),
+            "max_drawdown_pct": max(d for *_, d in stats if d is not None),
             "equity_note": (f"{len(stats)} simulator runs measured separately (each restarts at start equity); "
                             f"end equity is the start compounded by each run's return, the last run ended at "
                             f"{stats[-1][1]:,.2f}")}
@@ -126,4 +141,9 @@ if __name__ == "__main__":
     ap.add_argument("--date", help="all runs on one UTC day, YYYY-MM-DD")
     ap.add_argument("--broker", choices=["sim", "moomoo"], help="with --date: which broker's runs")
     a = ap.parse_args()
-    print(to_markdown(summarise(select(Ledger(a.ledger).read(), a.run_id, a.date, a.broker))), end="")
+    led = Ledger(a.ledger)
+    recs = led.read()
+    skipped = sum(1 for r, _ in led._lines() if r is None)
+    if skipped:
+        print(f"> note: {skipped} damaged ledger line(s) were skipped\n")
+    print(to_markdown(summarise(select(recs, a.run_id, a.date, a.broker))), end="")

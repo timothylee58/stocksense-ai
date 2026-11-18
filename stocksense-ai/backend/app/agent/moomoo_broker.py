@@ -58,6 +58,8 @@ class MoomooSimBroker:
     def _ticker(self, code: str) -> str:
         return code.split(".", 1)[1] if code.upper().startswith(_PREFIXES) else code
 
+    stops_unsaved = False      # set when a fill happened but the stop file could not be written
+
     def _load_stops(self) -> dict[str, float]:
         try:
             with open(self.state_path, encoding="utf-8") as f:
@@ -109,9 +111,14 @@ class MoomooSimBroker:
     def place_order(self, ticker: str, side: Side, qty: float, price: float,
                     stop_loss: float | None = None) -> Fill | None:
         m = self._m
-        ticker = self._ticker(self._code(ticker))      # accept "NVDA" or "US.NVDA"
-        if qty <= 0 or price <= 0:
+        if ticker.upper().startswith(_PREFIXES) and not ticker.upper().startswith(self.market + "."):
+            logger.error("refusing %s: market prefix does not match broker market %s", ticker, self.market)
             return None
+        ticker = self._ticker(self._code(ticker))      # accept "NVDA" or "US.NVDA"
+        if not (math.isfinite(qty) and math.isfinite(price)) or qty <= 0 or price <= 0:
+            return None
+        if stop_loss is not None and not (math.isfinite(stop_loss) and 0 < stop_loss < price):
+            stop_loss = None                            # an invalid stop is never recorded
         before = None
         if side == "SELL":
             before = self.get_account().positions.get(ticker)
@@ -136,15 +143,23 @@ class MoomooSimBroker:
             logger.warning("order %s for %s not filled", order_id, ticker)
             return None
         pnl = None
-        if side == "BUY":
-            if stop_loss:
-                self._stops[ticker] = stop_loss
-                self._save_stops()
-        else:
-            pnl = (avg - before.avg_price) * dealt   # gross: commission not reported by the API
-            if dealt >= before.qty:
-                self._stops.pop(ticker, None)
-                self._save_stops()
+        try:
+            if side == "BUY":
+                if stop_loss:
+                    prev = self._stops.get(ticker)
+                    self._stops[ticker] = max(prev, stop_loss) if prev else stop_loss   # ratchet up only
+                    self._save_stops()
+            else:
+                pnl = (avg - before.avg_price) * dealt   # gross: commission not reported by the API
+                if dealt >= before.qty:
+                    self._stops.pop(ticker, None)
+                    self._save_stops()
+        except OSError:
+            # the order already filled: losing the Fill would hide a real position from the ledger
+            logger.error("stop-loss state %s not writable; fill for %s is real", self.state_path, ticker)
+            self.stops_unsaved = True
+        if side == "SELL" and pnl is None:
+            pnl = (avg - before.avg_price) * dealt
         self._prices[ticker] = price
         return Fill(ticker, side, dealt, avg, 0.0, pnl)
 

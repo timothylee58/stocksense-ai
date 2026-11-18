@@ -35,6 +35,14 @@ class TradingAgent:
         self.state_unreadable = state_unreadable
         self._probed = False
 
+    def _log(self, event: str, **fields) -> None:
+        """Audit write that can never skip an exit: on failure entries fail closed instead."""
+        try:
+            self.ledger.write(event, **fields)
+        except OSError as exc:
+            self.state_ok = False
+            logger.error("ledger write failed (%s): %s", event, exc)
+
     def _persist(self) -> None:
         """Save risk state. A write failure must never stop exits: log it and block new entries."""
         if not self.state_path or self.state_unreadable:
@@ -58,7 +66,7 @@ class TradingAgent:
         qty_before = pos.qty        # brokers may mutate `pos` in place
         fill = self.broker.place_order(ticker, "SELL", qty_before, price)
         if not fill:
-            self.ledger.write("risk_event", action="order_rejected", side="SELL",
+            self._log("risk_event", action="order_rejected", side="SELL",
                               ticker=ticker, reason=reason)
             return False
         # closure comes from the confirmed fill quantity, not a second account read
@@ -73,10 +81,10 @@ class TradingAgent:
         else:
             self.risk.open_trade_pnl[ticker] = pnl
         self._persist()      # durable before anything else can fail
-        self.ledger.write("fill", reason=reason, closed=closed, trade_pnl=trade_pnl,
+        self._log("fill", reason=reason, closed=closed, trade_pnl=trade_pnl,
                           remaining=remaining, **fill.__dict__)
         if not closed:
-            self.ledger.write("risk_event", action="partial_exit", ticker=ticker, remaining=remaining)
+            self._log("risk_event", action="partial_exit", ticker=ticker, remaining=remaining)
         return closed
 
     def _reconcile(self, acct) -> None:
@@ -87,7 +95,7 @@ class TradingAgent:
         orphans = [t for t in self.risk.open_trade_pnl if t not in acct.positions]
         for t in orphans:
             lost = self.risk.open_trade_pnl.pop(t)
-            self.ledger.write("risk_event", action="orphaned_partial_pnl", ticker=t, pnl=lost,
+            self._log("risk_event", action="orphaned_partial_pnl", ticker=t, pnl=lost,
                               note="position closed outside the agent; PnL not carried forward")
         if orphans:
             self._persist()
@@ -95,12 +103,12 @@ class TradingAgent:
     def _mark(self, phase: str) -> None:
         acct = self.broker.get_account()
         self.risk.mark(acct.equity, utcnow())
-        self.ledger.write("equity", phase=phase, equity=acct.equity, cash=acct.cash,
+        self._log("equity", phase=phase, equity=acct.equity, cash=acct.cash,
                           drawdown=self.risk.drawdown, daily_loss=self.risk.daily_loss)
 
     def _flatten(self, attempts: int = 3) -> None:
         reason = self.risk.halt_reason() or "halt"
-        self.ledger.write("risk_event", action="flatten", reason=reason)
+        self._log("risk_event", action="flatten", reason=reason)
         for _ in range(attempts):      # retry partial/failed exits within the cycle
             acct = self.broker.get_account()
             if not acct.positions:
@@ -109,12 +117,12 @@ class TradingAgent:
                 self._sell(t, acct.prices.get(t, pos.avg_price), reason)
         left = list(self.broker.get_account().positions)
         if left:
-            self.ledger.write("risk_event", action="flatten_incomplete", remaining=left)
+            self._log("risk_event", action="flatten_incomplete", remaining=left)
 
     async def run_cycle(self) -> None:
         signals = await self.source()
         for s_ in signals:      # full input audit trail, including HOLDs and no-op SELLs
-            self.ledger.write("signal", ticker=s_.ticker, action=s_.action,
+            self._log("signal", ticker=s_.ticker, action=s_.action,
                               confidence=s_.confidence, price=s_.price, stop_loss=s_.stop_loss,
                               source=s_.source)
         self.broker.update_prices({s.ticker: s.price for s in signals})
@@ -130,7 +138,7 @@ class TradingAgent:
         for t, pos in acct.positions.items():
             if t not in have:
                 px = acct.prices.get(t, pos.avg_price)
-                self.ledger.write("signal", ticker=t, action="HOLD", price=px,
+                self._log("signal", ticker=t, action="HOLD", price=px,
                                   note="held position, no signal this cycle")
                 signals.append(TradeSignal(t, "HOLD", 0.0, px))
 
@@ -144,7 +152,7 @@ class TradingAgent:
             for s in signals:
                 why = self.risk.exit_reason(s, self.broker.get_account())
                 if why:
-                    self.ledger.write("decision", ticker=s.ticker, action="SELL", approved=True, reason=why)
+                    self._log("decision", ticker=s.ticker, action="SELL", approved=True, reason=why)
                     self._sell(s.ticker, s.price, why)
                     sold.add(s.ticker)
 
@@ -156,7 +164,7 @@ class TradingAgent:
 
             # 2) entries, most confident first; never re-buy what we just sold
             if not self.state_ok or self.unresolved_failure or self.state_unreadable:
-                self.ledger.write(
+                self._log(
                     "risk_event", action="entries_blocked",
                     reason=("risk state file is unreadable; repair or remove it" if self.state_unreadable
                             else "an earlier risk-state save failed; reconcile, then run with "
@@ -165,22 +173,24 @@ class TradingAgent:
                 return
             for s in sorted((x for x in signals if x.action == "BUY"), key=lambda x: -x.confidence):
                 if s.ticker in sold:
-                    self.ledger.write("decision", ticker=s.ticker, action="BUY", approved=False,
+                    self._log("decision", ticker=s.ticker, action="BUY", approved=False,
                                       reason="sold earlier this cycle")
                     continue
                 acct = self.broker.get_account()
                 d = self.risk.evaluate_entry(s, acct)
-                self.ledger.write("decision", ticker=s.ticker, action="BUY", approved=d.approved,
+                self._log("decision", ticker=s.ticker, action="BUY", approved=d.approved,
                                   qty=d.qty, reason=d.reason, confidence=s.confidence, price=s.price)
                 if not d.approved:
                     continue
                 stop = effective_stop(s, self.risk.limits)   # same stop as used for sizing
                 fill = self.broker.place_order(s.ticker, "BUY", d.qty, s.price, stop)
                 if fill:
+                    if getattr(self.broker, "stops_unsaved", False):
+                        self.state_ok = False       # stop file unwritable: hold further entries
                     self.risk.open_trade_pnl.pop(s.ticker, None)   # a new round trip starts clean
-                    self.ledger.write("fill", reason="entry", stop_loss=stop, **fill.__dict__)
+                    self._log("fill", reason="entry", stop_loss=stop, **fill.__dict__)
                 else:
-                    self.ledger.write("risk_event", action="order_rejected", side="BUY", ticker=s.ticker)
+                    self._log("risk_event", action="order_rejected", side="BUY", ticker=s.ticker)
         finally:
             try:
                 self._mark("post")                  # report sees fills and costs
@@ -228,6 +238,12 @@ async def _main(args: argparse.Namespace) -> None:
                 # acknowledging would clear the only restart gate while the history is still missing
                 raise SystemExit(f"cannot acknowledge: {state} exists but cannot be loaded; repair it first")
             ledger.write("risk_event", action="state_failure_acknowledged")
+        if args.reset_invalidation:
+            if not loaded:
+                raise SystemExit("--reset-invalidation needs a loadable risk state file")
+            risk.reset_invalidation()      # keeps peak equity and drawdown history intact
+            risk.save(state)
+            ledger.write("risk_event", action="invalidation_reset")
         agent = TradingAgent(broker, risk, ledger, predictor_source(tickers), state_path=state,
                              state_unreadable=unreadable)
         for i in range(args.cycles):
@@ -246,10 +262,12 @@ if __name__ == "__main__":
     ap.add_argument("--interval", type=float, default=300)
     ap.add_argument("--ledger", default="logs/agent_ledger.jsonl")
     ap.add_argument("--risk-state", default="logs/risk_state.json",
-                    help="persisted peak equity / loss history; delete to reset")
+                    help="persisted peak equity / loss history; do not delete to clear an invalidation")
     ap.add_argument("--broker", choices=["sim", "moomoo"], default="sim",
                     help="sim = in-memory; moomoo = OpenD paper (SIMULATE) account")
     ap.add_argument("--market", default="US", help="moomoo market for --broker moomoo")
     ap.add_argument("--ack-state-failure", action="store_true",
                     help="confirm you reconciled risk state after a failed save; unblocks entries")
+    ap.add_argument("--reset-invalidation", action="store_true",
+                    help="clear a latched strategy invalidation (keeps peak equity/drawdown history)")
     asyncio.run(_main(ap.parse_args()))

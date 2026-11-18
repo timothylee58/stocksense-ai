@@ -13,6 +13,8 @@ description: Refresh market-wide news sentiment context before a trading cycle. 
    Do **not** use `--demo`. Also check `DEMO_MODE`: when it is true the script uses
    synthetic headlines even without `--demo`, so label any such output as synthetic and
    never write it to the live cache.
+   If FinBERT fails to load, every headline gets the same placeholder (all neutral, 0.0): treat
+   that as sentiment unavailable, not as a neutral market.
 3. The headlines are market-wide (KLSE-oriented queries) and are not attributed to individual
    watchlist tickers.
 

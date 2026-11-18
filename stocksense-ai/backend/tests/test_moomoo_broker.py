@@ -167,3 +167,34 @@ def test_stops_file_written_atomically_and_corrupt_file_is_handled(tmp_path):
     assert not (tmp_path / "s.json.tmp").exists()
     (tmp_path / "s.json").write_text("{not json")
     assert b._load_stops() == {}
+
+
+def test_stops_replaced_via_os_replace_not_in_place(tmp_path, monkeypatch):
+    import os
+    calls = []
+    real = os.replace
+    monkeypatch.setattr(os, "replace", lambda a, b: (calls.append((a, b)), real(a, b))[1])
+    broker(tmp_path, FakeCtx()).place_order("NVDA", "BUY", 10, 100.0, stop_loss=95.0)
+    assert calls and calls[-1][1].endswith("s.json")
+
+
+def test_mismatched_market_prefix_and_nonfinite_inputs_are_refused(tmp_path):
+    ctx = FakeCtx()
+    b = broker(tmp_path, ctx)
+    assert b.place_order("HK.00700", "BUY", 10, 100.0) is None
+    assert b.place_order("NVDA", "BUY", float("nan"), 100.0) is None
+    assert b.place_order("NVDA", "BUY", 10, float("inf")) is None
+    assert ctx.orders == []
+
+
+def test_stop_write_failure_still_returns_fill_and_stops_only_ratchet_up(tmp_path, monkeypatch):
+    b = broker(tmp_path, FakeCtx())
+    assert b.place_order("NVDA", "BUY", 10, 100.0, stop_loss=95.0)
+    b.place_order("NVDA", "BUY", 5, 100.0, stop_loss=90.0)
+    assert b._stops["NVDA"] == 95.0
+
+    def boom():
+        raise OSError("disk full")
+    monkeypatch.setattr(b, "_save_stops", boom)
+    fill = b.place_order("AAPL", "BUY", 5, 100.0, stop_loss=95.0)
+    assert fill is not None and b.stops_unsaved

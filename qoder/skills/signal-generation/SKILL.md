@@ -17,9 +17,10 @@ price and a suggested stop-loss.
    missing, say so. Train out-of-band, never inside a trading cycle:
    `DEMO_MODE=false python -m scripts.train_model --ticker <TICKER>` (live data; with `DEMO_MODE=true`
    or `--demo` it trains on synthetic data) or `POST /api/train/<TICKER>`.
-2. Optional explanations: `GET /api/explain/<TICKER>` explains that same model. If the response has
+2. Optional explanations: `GET /api/explain/<TICKER>` explains that same model, trained live
+   (`DEMO_MODE=false`); a model trained with `DEMO_MODE=true` is synthetic. If the response has
    `"demo": true` (backend in demo mode), the drivers are synthetic: do not quote them.
-3. Output a table: ticker, action, confidence, price, stop, signal source (pkl or rule-based).
+3. Output a table: ticker, action, confidence, price, stop, signal source (xgb_binary or rule_based).
    Show SHAP drivers beside it; they explain the XGBoost leg only, not the LSTM leg of the ensemble.
 
 Rules
