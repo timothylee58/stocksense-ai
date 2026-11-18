@@ -40,7 +40,7 @@ class FakeCtx:
 
 def broker(tmp_path, ctx, **kw):
     return MoomooSimBroker(ctx=ctx, state_path=str(tmp_path / "s.json"),
-                           fill_timeout=0.05, poll_interval=0.01, **kw)
+                           fill_timeout=0.05, poll_interval=0.01, cancel_timeout=0.05, **kw)
 
 
 def test_account_maps_positions_and_stops(tmp_path):
@@ -89,3 +89,19 @@ def test_sell_without_position_is_noop(tmp_path):
     ctx = FakeCtx()
     assert broker(tmp_path, ctx).place_order("NVDA", "SELL", 5, 100.0) is None
     assert not ctx.orders
+
+
+def test_fill_landing_during_cancel_is_captured(tmp_path):
+    class LateFill(FakeCtx):
+        def __init__(self):
+            super().__init__(status="SUBMITTED", dealt=0)
+            self.canceled = False
+
+        def modify_order(self, *a, **kw):
+            self.canceled = True
+            self.status, self.dealt = "CANCELLED_PART", 3
+            return 0, pd.DataFrame()
+
+    ctx = LateFill()
+    f = broker(tmp_path, ctx).place_order("NVDA", "BUY", 10, 100.0, stop_loss=95.0)
+    assert ctx.canceled and f is not None and f.qty == 3

@@ -64,9 +64,16 @@ invalidation), confidence floor, already-held, max positions, price validity, th
 Quantity = floor(min(risk-to-stop size, per-position cap, remaining gross-exposure room, cash)),
 halved when drawdown >= 5%. Limits live in `RiskLimits` (defaults in the PRD).
 
-State that matters: peak equity, day-start equity, list of closed-trade PnLs. These are held
-in memory per process, so a restart resets them (known limitation; persisting them is a small
-follow-up).
+State that matters: peak equity, day-start equity, list of closed-trade PnLs. With
+`--broker moomoo` these are saved to `logs/risk_state.json` after every cycle and restored at
+start, so a restart keeps the drawdown halt, daily baseline and loss streak. Delete the file to
+reset deliberately. (The in-memory sim broker does not persist, since its account restarts at
+$100k.) A closed trade is recorded only when a position reaches zero; partial exits are summed.
+Sizing uses a conservative executable price (limit buffer + slippage) and a per-order fee
+allowance, and the same effective stop is used for sizing and the order. After exits the
+risk state is re-marked before entries, so a loss from an exit can halt same-cycle entries; a
+ticker sold in a cycle is not bought back in it, and held positions get their stop checked even
+if their signal failed.
 
 ## 5. Broker
 
@@ -89,9 +96,9 @@ follow-up).
 |---|---|
 | Signal fetch fails for a ticker | Logged, ticker skipped |
 | OpenD unreachable | Broker calls raise; cycle fails loudly (no silent paper/live confusion) |
-| Order not filled in time | Cancelled, logged as `order_rejected`, no position change |
+| Order not filled in time | Cancelled, final fill state re-polled; failures logged as `order_rejected` (buys and sells) |
 | ClickHouse down | Falls back to Redis/yfinance |
-| Process restart | Stops persist (Moomoo broker); risk state resets |
+| Process restart | Stops and risk state persist (Moomoo broker) |
 
 ## 8. Known gaps
 

@@ -13,6 +13,7 @@ All commands run from `stocksense-ai/backend`.
 |---|---|---|
 | Research | `market-research` | `scripts/ingest_news.py` |
 | Signal | `signal-generation` | `app.ml.predictor.run_prediction` via the loop |
+
 | Risk officer (veto) | `risk-officer` | `app/agent/risk.py` limits, `KILL_SWITCH` file |
 | Execution | `paper-execution` | `python -m app.agent.loop --broker moomoo` |
 | Reporting | `performance-report` | `python -m app.agent.report` |

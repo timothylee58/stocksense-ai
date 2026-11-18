@@ -12,6 +12,7 @@ Exits (stop-loss / SELL signal) are never blocked by the gate.
 """
 from __future__ import annotations
 
+import json
 import math
 import os
 from dataclasses import dataclass, field
@@ -35,6 +36,17 @@ class RiskLimits:
     hit_rate_window: int = 20
     min_hit_rate: float = 0.35
     kill_switch_path: str = "KILL_SWITCH"
+    # Size against a conservative executable price: limit aggression + slippage.
+    exec_buffer_pct: float = 0.005
+    fee_allowance: float = 2.0           # per order, reserved out of cash/risk
+
+
+def effective_stop(sig: TradeSignal, limits: RiskLimits) -> float:
+    """The one stop used for both sizing and order submission."""
+    st = sig.stop_loss
+    if st is not None and math.isfinite(st) and 0 < st < sig.price:
+        return float(st)
+    return sig.price * (1 - limits.default_stop_pct)
 
 
 @dataclass
@@ -54,6 +66,31 @@ class RiskManager:
     closed_pnls: list[float] = field(default_factory=list)
     manual_kill: bool = False
     _equity: float = 0.0
+
+    # ── persistence (survive restarts) ───────────────────────────────────────
+    def save(self, path: str) -> None:
+        d = os.path.dirname(path)
+        if d:
+            os.makedirs(d, exist_ok=True)
+        tmp = path + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump({"peak_equity": self.peak_equity,
+                       "day": self.day.isoformat() if self.day else None,
+                       "day_start_equity": self.day_start_equity,
+                       "closed_pnls": self.closed_pnls[-200:]}, f)
+        os.replace(tmp, path)
+
+    def load(self, path: str) -> bool:
+        try:
+            with open(path, encoding="utf-8") as f:
+                st = json.load(f)
+            self.peak_equity = float(st["peak_equity"])
+            self.day = date.fromisoformat(st["day"]) if st.get("day") else None
+            self.day_start_equity = float(st["day_start_equity"])
+            self.closed_pnls = [float(x) for x in st.get("closed_pnls", [])]
+            return True
+        except (OSError, ValueError, KeyError):
+            return False
 
     # ── state updates ────────────────────────────────────────────────────────
     def mark(self, equity: float, now: datetime) -> None:
@@ -126,18 +163,19 @@ class RiskManager:
             return Decision(False, reason="invalid price")
 
         equity = acct.equity
-        stop = sig.stop_loss if sig.stop_loss and 0 < sig.stop_loss < sig.price \
-            else sig.price * (1 - lim.default_stop_pct)
-        risk_per_share = sig.price - stop
+        stop = effective_stop(sig, lim)
+        px = sig.price * (1 + lim.exec_buffer_pct)      # conservative fill price
+        risk_per_share = px - stop
 
         factor = 0.5 if self.drawdown >= lim.soft_drawdown_pct else 1.0
-        qty_by_risk = equity * lim.risk_per_trade_pct * factor / risk_per_share
-        qty_by_pos = equity * lim.max_position_pct * factor / sig.price
+        budget = equity * lim.risk_per_trade_pct * factor - lim.fee_allowance
+        qty_by_risk = budget / risk_per_share if budget > 0 else 0.0
+        qty_by_pos = (equity * lim.max_position_pct * factor - lim.fee_allowance) / px
         room = max(0.0, equity * lim.max_gross_exposure_pct - acct.gross_exposure)
-        qty_by_gross = room / sig.price
-        qty_by_cash = acct.cash / sig.price
+        qty_by_gross = (room - lim.fee_allowance) / px
+        qty_by_cash = (acct.cash - lim.fee_allowance) / px
 
-        qty = math.floor(min(qty_by_risk, qty_by_pos, qty_by_gross, qty_by_cash))
+        qty = math.floor(max(0.0, min(qty_by_risk, qty_by_pos, qty_by_gross, qty_by_cash)))
         if qty < 1:
             return Decision(False, reason="size < 1 share after limits")
         note = "soft-drawdown half size" if factor < 1 else "ok"

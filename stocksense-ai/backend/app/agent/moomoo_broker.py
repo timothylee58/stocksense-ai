@@ -32,7 +32,8 @@ _PREFIXES = ("US.", "MY.", "HK.", "SG.", "CN.")
 class MoomooSimBroker:
     def __init__(self, host: str = "127.0.0.1", port: int = 11111, market: str = "US",
                  security_firm: str = "FUTUINC", acc_id: int = 0, fill_timeout: float = 20.0,
-                 poll_interval: float = 1.0, aggression_bps: float = 20.0,
+                 poll_interval: float = 1.0, cancel_timeout: float = 5.0,
+                 aggression_bps: float = 20.0,
                  state_path: str = "logs/moomoo_stops.json", ctx: Any = None):
         import moomoo as m
         self._m = m
@@ -40,6 +41,7 @@ class MoomooSimBroker:
         self.market = market.upper()
         self.acc_id = acc_id
         self.fill_timeout, self.poll = fill_timeout, poll_interval
+        self.cancel_timeout = cancel_timeout
         self.aggr = aggression_bps / 10_000
         self.state_path = state_path
         self._prices: dict[str, float] = {}
@@ -130,24 +132,40 @@ class MoomooSimBroker:
         self._prices[ticker] = price
         return Fill(ticker, side, dealt, avg, 0.0, pnl)
 
+    def _poll(self, order_id: str) -> tuple[float, float, bool]:
+        """Latest (dealt_qty, avg_price, is_terminal) for an order."""
+        ret, df = self.ctx.order_list_query(order_id=order_id, trd_env=self.env,
+                                            acc_id=self.acc_id, refresh_cache=True)
+        if not self._ok(ret, df, "order_list_query") or not len(df):
+            return 0.0, 0.0, False
+        row = df.iloc[0]
+        return (float(row["dealt_qty"]), float(row["dealt_avg_price"]),
+                str(row["order_status"]) in _TERMINAL)
+
     def _wait_fill(self, order_id: str) -> tuple[float, float]:
         deadline = time.time() + self.fill_timeout
         dealt, avg = 0.0, 0.0
         while True:
-            ret, df = self.ctx.order_list_query(order_id=order_id, trd_env=self.env,
-                                                acc_id=self.acc_id, refresh_cache=True)
-            if self._ok(ret, df, "order_list_query") and len(df):
-                row = df.iloc[0]
-                dealt, avg = float(row["dealt_qty"]), float(row["dealt_avg_price"])
-                if str(row["order_status"]) in _TERMINAL:
-                    return dealt, avg
+            dealt, avg, done = self._poll(order_id)
+            if done:
+                return dealt, avg
             if time.time() >= deadline:
                 break
             time.sleep(self.poll)
-        # timed out: cancel the remainder, keep whatever filled
+        # timed out: cancel, then confirm the final state (a fill can land
+        # between the last poll and the cancel, or the cancel can fail)
         ret, data = self.ctx.modify_order(self._m.ModifyOrderOp.CANCEL, order_id, 0, 0,
                                           trd_env=self.env, acc_id=self.acc_id)
-        self._ok(ret, data, "cancel_order")
+        if not self._ok(ret, data, "cancel_order"):
+            logger.error("cancel failed for order %s; it may still be live", order_id)
+        end = time.time() + self.cancel_timeout
+        while time.time() < end:
+            dealt, avg, done = self._poll(order_id)
+            if done:
+                return dealt, avg
+            time.sleep(self.poll)
+        dealt, avg, _ = self._poll(order_id)
+        logger.error("order %s not terminal after cancel; reporting %s filled", order_id, dealt)
         return dealt, avg
 
     def close(self) -> None:

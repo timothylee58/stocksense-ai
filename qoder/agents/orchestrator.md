@@ -15,7 +15,7 @@ researcher --sentiment--> signaler --signals--> risk-officer --approved orders--
 
 | Agent | Skill | Output |
 |---|---|---|
-| researcher | market-research | sentiment table, flagged tickers |
+| researcher | market-research | market-wide sentiment context (informational only) |
 | signaler | signal-generation | action, confidence, stop per ticker |
 | risk-officer | risk-officer | approve/veto with reason; may halt |
 | executor | paper-execution | fills in the ledger |
