@@ -30,7 +30,8 @@ researcher --sentiment--> signaler --signals--> risk-officer --approved orders--
 
 ## Schedule
 
-- Pre-market: researcher -> signaler.
+- Pre-market: researcher (market-wide context for the operator). Signals are generated inside each
+  cycle by `predictor_source`; there is no separate pre-market signaler step.
 - Market hours: risk-officer -> executor every 5 minutes. One process runs `--cycles N` cycles with `--interval 300` between them (without `--cycles`, it runs one cycle and exits); size `N` to the session length.
 - After close: reporter.
 

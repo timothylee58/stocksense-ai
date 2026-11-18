@@ -38,7 +38,7 @@ Each Qoder agent is a thin operator over a repo command; trading logic stays in 
 
 | Component | Path | Responsibility |
 |---|---|---|
-| Data layer | `app/data/fetcher.py`, `app/core/ch_store.py` | OHLCV + indicators: Redis (15 min) then ClickHouse then yfinance/moomoo |
+| Data layer | `app/data/fetcher.py`, `app/core/ch_store.py` | OHLCV + indicators: Redis (15 min), then ClickHouse, then moomoo (if connected), then yfinance |
 | Prediction | `app/ml/predictor.py`, `app/ml/models/{xgb_model,lstm}.py` | Ensemble signal + confidence + stop suggestion |
 | Explain / backtest | `app/services/xgboost_service.py`, `app/services/backtest_service.py`, `scripts/train_model.py` | SHAP, Optuna tuning, walk-forward metrics (binary next-day model) |
 | Signal adapter | `app/agent/loop.py: predictor_source` | `run_prediction` to `TradeSignal` |
@@ -78,7 +78,7 @@ if their signal failed.
 ## 5. Broker
 
 - `SimBroker`: instant fills with slippage and commission; used for dry runs and tests.
-- `MoomooSimBroker`: `OpenSecTradeContext` with `TrdEnv.SIMULATE` fixed. Limit orders priced 20 bps through the market; polls up to 20 s, cancels the remainder, supports partial fills. Stops are not native to the flow, so they are tracked locally and saved to `logs/moomoo_stops.json`.
+- `MoomooSimBroker`: `OpenSecTradeContext` with `TrdEnv.SIMULATE` fixed. Limit orders priced 20 bps through the *signal price* supplied by the loop (no fresh quote is fetched, so it can be stale); polls up to 20 s, cancels the remainder, supports partial fills. Stops are not native to the flow, so they are tracked locally and saved to `logs/moomoo_stops.json`.
 - Both satisfy the `Broker` protocol, so the loop is unchanged between them.
 
 ## 6. Data stores

@@ -35,7 +35,7 @@ class SimBroker:
     def place_order(self, ticker: str, side: Side, qty: float, price: float,
                     stop_loss: float | None = None) -> Fill | None:
         a = self._acct
-        if qty <= 0 or price <= 0:
+        if not (0 < qty < float("inf") and 0 < price < float("inf")):   # rejects NaN/inf too
             return None
         if side == "BUY":
             px = price * (1 + self.slip)
@@ -49,6 +49,8 @@ class SimBroker:
                 total = pos.qty + qty
                 pos.avg_price = (pos.avg_price * pos.qty + px * qty + self.commission) / total
                 pos.qty = total
+                if stop_loss:                     # honour the newest stop, like MoomooSimBroker
+                    pos.stop_loss = stop_loss
             else:
                 a.positions[ticker] = Position(ticker, qty, (px * qty + self.commission) / qty, stop_loss)
             a.prices[ticker] = price

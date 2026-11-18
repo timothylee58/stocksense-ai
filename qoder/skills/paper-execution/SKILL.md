@@ -19,5 +19,6 @@ command from `stocksense-ai/backend`; the `app` package and `logs/` paths are re
 Rules
 - Only the simulated environment is used; there is no flag for live trading.
 - If an order returns no fill, report it; never retry blindly or resize past risk limits.
-- Orders block up to 20 seconds waiting for fills; unfilled remainders are cancelled.
+- Each order can block for about 25 s (20 s waiting for fills plus up to 5 s confirming the cancel
+  of any unfilled remainder), and orders are sent one at a time, so a cycle with many orders is slow.
 - Stops are tracked locally in `logs/moomoo_stops.json`.

@@ -126,9 +126,11 @@ def test_invalid_stop_replaced_consistently():
 
 
 def test_sizing_never_exceeds_caps_after_costs():
+    lim = RiskLimits(kill_switch_path="/nonexistent/KS")
     b = _Sim(cash=100_000)
     d = rm().evaluate_entry(sig(stop=99.9), b.get_account())  # tight stop -> huge risk qty
-    assert d.qty * 100.5 + 2 <= 10_000 + 1e-6      # per-position cap incl. buffer and fee
+    cost = d.qty * 100.0 * (1 + lim.exec_buffer_pct) + lim.fee_allowance
+    assert cost <= lim.max_position_pct * 100_000 + 1e-6      # per-position cap incl. buffer and fee
 
 
 def test_risk_state_survives_restart(tmp_path):
@@ -390,3 +392,26 @@ def test_orphaned_partial_pnl_is_not_carried_into_next_trade(tmp_path):
     assert r.open_trade_pnl == {}
     assert any(e.get("action") == "orphaned_partial_pnl" for e in a.ledger.read())
     assert json.loads(pathlib.Path(state).read_text())["open_trade_pnl"] == {}   # persisted clean
+
+
+def test_flatten_reports_incomplete_when_broker_rejects_sells(tmp_path):
+    async def src():
+        return [sig(a="HOLD")]
+    r = rm()
+    r.manual_kill = True
+    a = TradingAgent(_NoSell(), r, Ledger(str(tmp_path / "l.jsonl")), src)
+    a.broker.place_order("NVDA", "BUY", 10, 100.0, 95.0)
+    asyncio.run(a.run_cycle())
+    ev = a.ledger.read()
+    assert "NVDA" in a.broker.get_account().positions
+    assert any(e.get("action") == "flatten_incomplete" and e["remaining"] == ["NVDA"] for e in ev)
+    assert sum(1 for e in ev if e.get("action") == "order_rejected") == 3     # retried
+
+
+def test_sim_broker_rejects_non_finite_inputs_and_updates_stop_on_add_on():
+    b = _Sim()
+    assert b.place_order("X", "BUY", 5, float("nan")) is None
+    assert b.place_order("X", "BUY", float("inf"), 100.0) is None
+    b.place_order("X", "BUY", 5, 100.0, stop_loss=90.0)
+    b.place_order("X", "BUY", 5, 100.0, stop_loss=95.0)
+    assert b.get_account().positions["X"].stop_loss == 95.0

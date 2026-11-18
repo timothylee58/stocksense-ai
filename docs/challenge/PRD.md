@@ -24,7 +24,7 @@ with an honest record of what worked and what failed. Top 10 present on 8 Dec.
 ## 3. Users
 
 - **Judges:** need to see a clear thesis, enforced risk controls, real agent engineering in Qoder, and reproducible docs.
-- **Operator (the entrant):** runs cycles, can halt the agent instantly, reads daily reports.
+- **Operator (the entrant):** runs cycles, can halt the agent (the kill switch takes effect on the next cycle, or when an in-flight order finishes or times out, up to ~25 s per order), reads daily reports.
 
 ## 4. Scope
 
@@ -44,7 +44,8 @@ with an honest record of what worked and what failed. Top 10 present on 8 Dec.
 
 ## 5. Strategy (draft hypothesis, unvalidated)
 
-**Thesis.** Combine a technical-indicator model ensemble with sentiment as a filter, and take
+**Thesis.** Combine a technical-indicator model ensemble (its "sentiment" input today is derived
+from RSI/MACD; FinBERT news sentiment is a planned filter, not live) and take
 long-only positions in liquid US names only when model confidence clears a threshold and every
 risk check passes. The edge is expected to be small; the entry's differentiator is disciplined
 risk control and a transparent audit trail rather than raw return.
@@ -66,7 +67,7 @@ position; 60% max gross exposure; 5 max positions; soft drawdown 5% (half size);
 |---|---|---|
 | R1 | Agent never places a live order | Done (SIMULATE hard-coded) |
 | R2 | Every decision logged with reason, including rejections | Done |
-| R3 | Kill switch halts and flattens within one cycle | Done (tested with sim broker) |
+| R3 | Kill switch halts and attempts to flatten within one cycle | Partial: retried up to 3 times and `flatten_incomplete` is logged, but broker rejections can still leave positions (tested with sim broker only) |
 | R4 | Position sizing from risk-to-stop, capped by limits | Done |
 | R5 | Moomoo paper broker adapter | Written, **not tested against a real OpenD** |
 | R6 | Signals come from a model that is actually trained and validated | **Open** (see section 8) |
