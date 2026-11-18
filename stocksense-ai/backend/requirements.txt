@@ -9,7 +9,7 @@ python-dotenv==1.0.1
 yfinance>=0.2.44
 moomoo-api>=10.2.6208
 pandas>=2.2.3
-numpy>=1.26.4
+numpy>=1.26.4,<2.5      # numba (via shap) lags new NumPy releases
 pandas-ta>=0.3.14b
 
 # ML core
@@ -25,7 +25,7 @@ tokenizers==0.20.3
 # ML ops
 mlflow==2.17.0
 optuna==4.0.0
-shap==0.46.0
+shap>=0.51.0            # 0.46 cannot read XGBoost 3.x models (base_score format)
 
 # Data ingestion
 newsapi-python==0.2.7

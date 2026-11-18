@@ -73,7 +73,7 @@ def _fetch_data(ticker: str, period: str = "2y") -> pd.DataFrame:
         settings = get_settings()
 
         loop = asyncio.get_event_loop()
-        df = loop.run_until_complete(fetch_stock_data(ticker, period="2y"))
+        df = loop.run_until_complete(fetch_stock_data(ticker, period_years=2))
         if df is not None and len(df) > 100:
             logger.info("Fetched %d rows for %s via primary fetcher", len(df), ticker)
             return df
@@ -88,6 +88,9 @@ def _fetch_data(ticker: str, period: str = "2y") -> pd.DataFrame:
     if isinstance(df.columns, pd.MultiIndex):
         df.columns = df.columns.get_level_values(0)
     logger.info("yfinance: fetched %d rows for %s (%s)", len(df), ticker, yf_ticker)
+    if "rsi" not in df.columns:
+        raise RuntimeError(f"no indicator columns for {ticker}: the primary fetcher failed and the "
+                           "raw yfinance fallback cannot build the feature matrix")
     return df
 
 
@@ -241,6 +244,8 @@ def train_pipeline(ticker: str, n_trials: int = 50, use_mlflow: bool = False, de
     os.makedirs(settings.models_dir, exist_ok=True)
     mp = os.path.join(settings.models_dir, f"xgb_{ticker.upper()}.json")
     final_model.save_model(mp)
+    from app.services.xgboost_service import save_feature_columns
+    save_feature_columns(ticker, list(X.columns), demo=demo or settings.demo_mode)     # inference aligns to exactly these columns
     logger.info("Model saved → %s", mp)
 
     # ── 5. Evaluate on held-out test set ─────────────────────────────────────

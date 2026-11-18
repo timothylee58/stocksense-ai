@@ -14,13 +14,13 @@ from __future__ import annotations
 
 import logging
 import os
-from datetime import timezone
 
 import numpy as np
 import pandas as pd
 import xgboost as xgb
 
-from app.services.feature_service import build_feature_matrix, build_target_series
+from app.core.config import get_settings
+from app.services.xgboost_service import aligned_features
 
 logger = logging.getLogger(__name__)
 
@@ -53,7 +53,7 @@ def run_backtest(
     model.load_model(mp)
 
     # Feature matrix and targets — chronologically aligned
-    X = build_feature_matrix(df, include_anomaly=True).fillna(0)
+    X = aligned_features(df, ticker, model).fillna(0)
     close = df["Close"].squeeze()
 
     # Both X and close must be same length; X already drops the last target-less row
@@ -70,7 +70,8 @@ def run_backtest(
 
     # Predict probability of UP for every test row
     prob_up    = model.predict_proba(X_test.values)[:, 1]
-    position   = (prob_up > 0.5).astype(float)   # 1 = hold, 0 = flat
+    # same entry rule as the trading signal: long only at P(UP) >= direction_threshold
+    position   = (prob_up >= get_settings().direction_threshold).astype(float)   # 1 = hold, 0 = flat
 
     # Next-day log-return (use log for compounding correctness)
     log_ret    = np.log(close_test / close_test.shift(1)).fillna(0).values
