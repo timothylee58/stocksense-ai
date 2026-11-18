@@ -55,4 +55,4 @@ class Fill:
     price: float
     commission: float
     realized_pnl: float | None   # set on sells only
-    ts: datetime = field(default_factory=utcnow)
+    filled_at: datetime = field(default_factory=utcnow)

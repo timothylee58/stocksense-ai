@@ -1,4 +1,5 @@
 import asyncio
+import pathlib
 from datetime import datetime, timezone
 
 import pytest
@@ -192,3 +193,96 @@ def test_last_equity_mark_includes_fills(tmp_path):
     asyncio.run(a.run_cycle())
     eq = [e for e in a.ledger.read() if e["event"] == "equity"]
     assert eq[-1]["phase"] == "post" and eq[-1]["equity"] < 100_000   # costs booked
+
+
+# ── second review round ──────────────────────────────────────────────────────
+def test_kill_switch_file_blocks_entries(tmp_path):
+    ks = tmp_path / "KS"
+    r = RiskManager(RiskLimits(kill_switch_path=str(ks)))
+    r.mark(100_000, NOW)
+    assert r.evaluate_entry(sig(), SimBroker().get_account()).approved
+    ks.write_text("")
+    d = r.evaluate_entry(sig(), SimBroker().get_account())
+    assert not d.approved and "kill switch" in d.reason and r.should_flatten()
+
+
+def test_default_kill_switch_path_is_absolute():
+    from app.agent.risk import DEFAULT_KILL_SWITCH
+    assert DEFAULT_KILL_SWITCH.startswith("/") and DEFAULT_KILL_SWITCH.endswith("KILL_SWITCH")
+
+
+def test_hit_rate_invalidation_latches_and_persists(tmp_path):
+    r = rm()
+    for p in [10, -1] * 10:               # 50% hit rate: fine
+        r.record_closed_trade(p)
+    assert r.entry_block_reason() is None
+    r2 = rm()
+    for p in ([10] + [-1] * 4) * 4:       # 20% hit rate, never 5 losses in a row
+        r2.record_closed_trade(p)
+    assert "hit rate" in (r2.entry_block_reason() or "")
+    r2.record_closed_trade(100)           # a later win must NOT clear a latched halt
+    assert r2.entry_block_reason() is not None
+    path = str(tmp_path / "r.json")
+    r2.save(path)
+    r3 = rm()
+    assert r3.load(path) and r3.entry_block_reason() is not None
+    r3.reset_invalidation()
+    assert r3.entry_block_reason() is None
+
+
+def test_flatten_retries_partial_exits(tmp_path):
+    class Half(_Sim):
+        def place_order(self, ticker, side, qty, price, stop_loss=None):
+            return super().place_order(ticker, side, qty / 2 if side == "SELL" else qty, price, stop_loss)
+
+    async def src():
+        return [sig(a="HOLD")]
+    r = rm()
+    r.manual_kill = True
+    a = TradingAgent(Half(), r, Ledger(str(tmp_path / "l.jsonl")), src)
+    a.broker.place_order("NVDA", "BUY", 8, 100.0, 95.0)
+    asyncio.run(a.run_cycle())
+    assert not a.broker.get_account().positions or a.broker.get_account().positions["NVDA"].qty < 1.1
+
+
+def test_signals_are_logged_including_holds(tmp_path):
+    a = _agent(tmp_path, [[sig(a="HOLD")]])
+    asyncio.run(a.run_cycle())
+    assert any(e["event"] == "signal" and e["action"] == "HOLD" for e in a.ledger.read())
+
+
+def test_fill_does_not_overwrite_ledger_timestamp(tmp_path):
+    a = _agent(tmp_path, [[sig()]])
+    asyncio.run(a.run_cycle())
+    fills = [e for e in a.ledger.read() if e["event"] == "fill"]
+    assert "T" in fills[0]["ts"] and "filled_at" in fills[0]
+
+
+def test_ledger_sanitises_non_finite(tmp_path):
+    led = Ledger(str(tmp_path / "l.jsonl"))
+    led.write("equity", equity=float("nan"), x=[float("inf")])
+    raw = pathlib.Path(led.path).read_text()
+    assert "NaN" not in raw and "Infinity" not in raw and led.read()[0]["equity"] is None
+
+
+def test_sim_round_trip_pnl_matches_cash_change():
+    b = _Sim(cash=100_000)
+    b.place_order("X", "BUY", 10, 100.0)
+    f = b.place_order("X", "SELL", 10, 100.0)
+    assert 100_000 + f.realized_pnl == pytest.approx(b.get_account().cash)
+
+
+def test_report_isolates_runs_and_counts_round_trips(tmp_path):
+    from app.agent.report import select, summarise
+    path = str(tmp_path / "l.jsonl")
+    for _ in range(2):                    # two separate runs in one ledger
+        led = Ledger(path)
+        async def src():
+            return [sig()]
+        a = TradingAgent(SimBroker(), rm(), led, src)
+        asyncio.run(a.run_cycle())
+    ev = Ledger(path).read()
+    assert len({e["run_id"] for e in ev}) == 2
+    assert len(select(ev)) < len(ev)                          # latest run only
+    assert summarise(select(ev))["start_equity"] == 100_000   # not mixed with the other run
+    assert select(ev, date="1999-01-01") == []

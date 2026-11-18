@@ -18,11 +18,18 @@ audits them. Defaults:
 | Daily loss limit | 3% |
 | Strategy invalidated | 5 straight losses, or hit rate < 35% over last 20 trades |
 
-Invalidation means the thesis is considered broken: stop entering and wait for a human review.
+Invalidation latches: once triggered, new entries stay blocked (and this is saved in
+`logs/risk_state.json` for the Moomoo broker) until a human reviews the thesis and resets it
+(delete the state file, or call `RiskManager.reset_invalidation()`). A later winning exit does
+not clear it. With the in-memory sim broker nothing persists across processes.
+
+Sizing scope: in soft drawdown the risk and per-position terms are halved; a binding
+gross-exposure or cash cap is not halved further.
 
 Procedures
 - Audit: read `logs/agent_ledger.jsonl` and list every rejected decision with its reason.
-- Kill switch: `touch KILL_SWITCH` in the working directory. The next cycle flattens all
+- Kill switch: `touch stocksense-ai/backend/KILL_SWITCH` (the default path is anchored to the
+  backend directory, so it works from any working directory). The next cycle flattens all
   positions and blocks entries. Remove the file only after a human decides to resume.
 - Exits (stop-loss, SELL) are never blocked.
 

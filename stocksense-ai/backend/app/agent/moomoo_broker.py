@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import os
 import time
 from typing import Any
@@ -61,15 +62,21 @@ class MoomooSimBroker:
         try:
             with open(self.state_path, encoding="utf-8") as f:
                 return {k: float(v) for k, v in json.load(f).items()}
+        except FileNotFoundError:
+            return {}
         except (OSError, ValueError):
+            logger.error("stop-loss state %s is unreadable; protecting no positions until "
+                         "stops are re-set", self.state_path)
             return {}
 
     def _save_stops(self) -> None:
         d = os.path.dirname(self.state_path)
         if d:
             os.makedirs(d, exist_ok=True)
-        with open(self.state_path, "w", encoding="utf-8") as f:
+        tmp = self.state_path + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:     # atomic: never leave half a file
             json.dump(self._stops, f)
+        os.replace(tmp, self.state_path)
 
     def _ok(self, ret: Any, data: Any, what: str) -> bool:
         if ret == self._m.RET_OK:
@@ -102,14 +109,23 @@ class MoomooSimBroker:
     def place_order(self, ticker: str, side: Side, qty: float, price: float,
                     stop_loss: float | None = None) -> Fill | None:
         m = self._m
+        ticker = self._ticker(self._code(ticker))      # accept "NVDA" or "US.NVDA"
         if qty <= 0 or price <= 0:
             return None
-        before = self.get_account().positions.get(ticker)
-        if side == "SELL" and before is None:
-            return None
-        limit = round(price * (1 + self.aggr if side == "BUY" else 1 - self.aggr), 2)
+        before = None
+        if side == "SELL":
+            before = self.get_account().positions.get(ticker)
+            if before is None:
+                return None
+            send_qty = float(qty)                       # allow closing fractional holdings
+        else:
+            send_qty = float(math.floor(qty))           # buy whole shares only
+            if send_qty < 1:
+                return None
+        raw = price * (1 + self.aggr if side == "BUY" else 1 - self.aggr)
+        limit = round(raw, 2 if raw >= 1 else 4)        # finer ticks for sub-$1 stocks
         ret, data = self.ctx.place_order(
-            price=limit, qty=int(qty), code=self._code(ticker),
+            price=limit, qty=send_qty, code=self._code(ticker),
             trd_side=m.TrdSide.BUY if side == "BUY" else m.TrdSide.SELL,
             order_type=m.OrderType.NORMAL, trd_env=self.env, acc_id=self.acc_id)
         if not self._ok(ret, data, "place_order"):
@@ -125,8 +141,8 @@ class MoomooSimBroker:
                 self._stops[ticker] = stop_loss
                 self._save_stops()
         else:
-            pnl = (avg - before.avg_price) * dealt  # type: ignore[union-attr]
-            if dealt >= before.qty:  # type: ignore[union-attr]
+            pnl = (avg - before.avg_price) * dealt   # gross: commission not reported by the API
+            if dealt >= before.qty:
                 self._stops.pop(ticker, None)
                 self._save_stops()
         self._prices[ticker] = price

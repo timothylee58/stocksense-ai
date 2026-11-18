@@ -17,8 +17,12 @@ import math
 import os
 from dataclasses import dataclass, field
 from datetime import date, datetime
+from pathlib import Path
 
 from app.agent.models import Account, TradeSignal
+
+# Anchored to the backend directory so the file works from any cwd.
+DEFAULT_KILL_SWITCH = str(Path(__file__).resolve().parents[2] / "KILL_SWITCH")
 
 
 @dataclass
@@ -35,7 +39,7 @@ class RiskLimits:
     max_consecutive_losses: int = 5
     hit_rate_window: int = 20
     min_hit_rate: float = 0.35
-    kill_switch_path: str = "KILL_SWITCH"
+    kill_switch_path: str = DEFAULT_KILL_SWITCH
     # Size against a conservative executable price: limit aggression + slippage.
     exec_buffer_pct: float = 0.005
     fee_allowance: float = 2.0           # per order, reserved out of cash/risk
@@ -65,6 +69,7 @@ class RiskManager:
     day_start_equity: float = 0.0
     closed_pnls: list[float] = field(default_factory=list)
     manual_kill: bool = False
+    invalidated: str | None = None      # latched until a human resets it
     _equity: float = 0.0
 
     # ── persistence (survive restarts) ───────────────────────────────────────
@@ -77,7 +82,8 @@ class RiskManager:
             json.dump({"peak_equity": self.peak_equity,
                        "day": self.day.isoformat() if self.day else None,
                        "day_start_equity": self.day_start_equity,
-                       "closed_pnls": self.closed_pnls[-200:]}, f)
+                       "closed_pnls": self.closed_pnls[-200:],
+                       "invalidated": self.invalidated}, f)
         os.replace(tmp, path)
 
     def load(self, path: str) -> bool:
@@ -88,6 +94,7 @@ class RiskManager:
             self.day = date.fromisoformat(st["day"]) if st.get("day") else None
             self.day_start_equity = float(st["day_start_equity"])
             self.closed_pnls = [float(x) for x in st.get("closed_pnls", [])]
+            self.invalidated = st.get("invalidated")
             return True
         except (OSError, ValueError, KeyError):
             return False
@@ -99,6 +106,11 @@ class RiskManager:
         if self.day != now.date():
             self.day = now.date()
             self.day_start_equity = equity
+
+    def reset_invalidation(self) -> None:
+        """Human decision to resume after reviewing the thesis."""
+        self.invalidated = None
+        self.closed_pnls.clear()
 
     def record_closed_trade(self, pnl: float) -> None:
         self.closed_pnls.append(pnl)
@@ -135,14 +147,18 @@ class RiskManager:
         lim = self.limits
         if self.daily_loss >= lim.daily_loss_limit_pct:
             return f"daily loss {self.daily_loss:.1%} >= {lim.daily_loss_limit_pct:.0%}"
+        if self.invalidated:
+            return self.invalidated
         tail = self.closed_pnls[-lim.max_consecutive_losses:]
         if len(tail) == lim.max_consecutive_losses and all(p < 0 for p in tail):
-            return f"strategy invalidated: {lim.max_consecutive_losses} consecutive losses"
+            self.invalidated = f"strategy invalidated: {lim.max_consecutive_losses} consecutive losses"
+            return self.invalidated
         win = self.closed_pnls[-lim.hit_rate_window:]
         if len(win) == lim.hit_rate_window:
             hit = sum(p > 0 for p in win) / len(win)
             if hit < lim.min_hit_rate:
-                return f"strategy invalidated: hit rate {hit:.0%} < {lim.min_hit_rate:.0%}"
+                self.invalidated = f"strategy invalidated: hit rate {hit:.0%} < {lim.min_hit_rate:.0%}"
+                return self.invalidated
         return None
 
     # ── entry gate ───────────────────────────────────────────────────────────

@@ -17,6 +17,8 @@ last price and a suggested stop-loss.
    binary next-day) used only by `/api/explain` and `/api/backtest`. Training it does not
    change the trading signal until the two pipelines are unified (see docs/challenge/PRD.md s.8).
 2. For explanations, call `GET /api/explain/<TICKER>` (SHAP contributions) and quote the top 3.
+   If the response has `"demo": true` (backend in demo mode), the drivers are synthetic: do not
+   quote them; say explanations are unavailable.
 3. Output a table: ticker, action, confidence, price, stop, top drivers.
 
 Rules

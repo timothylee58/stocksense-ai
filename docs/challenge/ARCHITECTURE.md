@@ -13,12 +13,12 @@ flowchart LR
   end
   subgraph Repo["stocksense-ai/backend"]
     ING[scripts/ingest_news.py] --> RED[(Redis)]
-    PRED[ml/predictor.run_prediction]
-    LOOP[agent/loop.TradingAgent]
-    RISK[agent/risk.RiskManager]
-    BRK[agent/broker + moomoo_broker]
+    PRED[app/ml/predictor.run_prediction]
+    LOOP[app/agent/loop.TradingAgent]
+    RISK[app/agent/risk.RiskManager]
+    BRK[app/agent/broker + moomoo_broker]
     LED[(logs/agent_ledger.jsonl)]
-    REP[agent/report]
+    REP[app/agent/report]
   end
   DATA[yfinance / moomoo quotes] --> PRED
   CH[(ClickHouse OHLCV)] <--> PRED
@@ -39,13 +39,13 @@ Each Qoder agent is a thin operator over a repo command; trading logic stays in 
 | Component | Path | Responsibility |
 |---|---|---|
 | Data layer | `app/data/fetcher.py`, `app/core/ch_store.py` | OHLCV + indicators: Redis (15 min) then ClickHouse then yfinance/moomoo |
-| Prediction | `app/ml/predictor.py`, `ml/models/{xgb_model,lstm}.py` | Ensemble signal + confidence + stop suggestion |
-| Explain / backtest | `services/xgboost_service.py`, `backtest_service.py`, `scripts/train_model.py` | SHAP, Optuna tuning, walk-forward metrics (binary next-day model) |
-| Signal adapter | `agent/loop.py: predictor_source` | `run_prediction` to `TradeSignal` |
-| Risk gate | `agent/risk.py` | Pre-trade checks, sizing, halts, invalidation |
-| Broker | `agent/broker.py`, `agent/moomoo_broker.py` | `Broker` protocol; in-memory sim; Moomoo SIMULATE adapter |
-| Ledger | `agent/ledger.py` | Append-only JSONL: decision, fill, risk_event, equity |
-| Report | `agent/report.py` | Markdown summary for the deck |
+| Prediction | `app/ml/predictor.py`, `app/ml/models/{xgb_model,lstm}.py` | Ensemble signal + confidence + stop suggestion |
+| Explain / backtest | `app/services/xgboost_service.py`, `app/services/backtest_service.py`, `scripts/train_model.py` | SHAP, Optuna tuning, walk-forward metrics (binary next-day model) |
+| Signal adapter | `app/agent/loop.py: predictor_source` | `run_prediction` to `TradeSignal` |
+| Risk gate | `app/agent/risk.py` | Pre-trade checks, sizing, halts, invalidation |
+| Broker | `app/agent/broker.py`, `app/agent/moomoo_broker.py` | `Broker` protocol; in-memory sim; Moomoo SIMULATE adapter |
+| Ledger | `app/agent/ledger.py` | Append-only JSONL: signal, decision, fill, risk_event, equity; each record carries a `run_id` |
+| Report | `app/agent/report.py` | Markdown summary of one run (latest by default) or one UTC day |
 | Agent specs | `qoder/` | Skills + orchestrator (drafts) |
 
 ## 3. Cycle sequence
@@ -102,6 +102,11 @@ if their signal failed.
 
 ## 8. Known gaps
 
+- **Commission on Moomoo fills is reported as 0 and sell PnL is gross**, because the order API call used does not return fees. Closed-trade PnL, invalidation and win rate are therefore slightly optimistic on the Moomoo path (the sim broker includes costs). Querying fees is a follow-up.
+- Invalidation latches until a human resets it (`logs/risk_state.json` for Moomoo; delete the file or `reset_invalidation()`).
+- In soft drawdown only the risk and per-position size terms are halved; a binding gross-exposure or cash cap is not halved further.
+- The report covers one run or one UTC day; it does not merge runs.
+
 See PRD section 8: the model that trades is not the model that is backtested/explained, the
 ensemble weights differ from documentation, and the Moomoo adapter is untested against a real
 OpenD. Bursa tickers need a Moomoo code mapping.
@@ -113,5 +118,5 @@ cd stocksense-ai/backend
 python -m app.agent.loop --tickers NVDA --broker sim                # dry run
 python -m app.agent.loop --tickers NVDA,AAPL --broker moomoo --market US
 python -m app.agent.report --ledger logs/agent_ledger.jsonl > report.md
-touch KILL_SWITCH   # flatten + halt on next cycle
+touch KILL_SWITCH   # in stocksense-ai/backend (anchored path); flatten + halt on next cycle
 ```

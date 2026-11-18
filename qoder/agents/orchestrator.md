@@ -23,15 +23,15 @@ researcher --sentiment--> signaler --signals--> risk-officer --approved orders--
 
 ## Rules
 
-1. The executor acts only on signals the risk officer approved. A veto is final for that cycle.
-2. Any hard-drawdown or kill-switch condition halts all agents except the reporter.
+1. The executor acts only on risk-approved *entry* signals; stop-loss and SELL exits execute immediately and are never blocked. A veto is final for that cycle's entries.
+2. Any hard-drawdown or kill-switch condition blocks new entries and makes the executor flatten the book; the reporter still runs.
 3. Every decision, approved or not, is written to `logs/agent_ledger.jsonl` with its reason.
 4. Paper account only.
 
 ## Schedule
 
 - Pre-market: researcher -> signaler.
-- Market hours: risk-officer -> executor every 5 minutes (`--interval 300`).
+- Market hours: risk-officer -> executor every 5 minutes. One process runs `--cycles N` cycles with `--interval 300` between them (without `--cycles`, it runs one cycle and exits); size `N` to the session length.
 - After close: reporter.
 
 ## Known gaps

@@ -39,12 +39,15 @@ class TradingAgent:
             self.ledger.write("risk_event", action="order_rejected", side="SELL",
                               ticker=ticker, reason=reason)
             return False
-        self.ledger.write("fill", reason=reason, **fill.__dict__)
         if fill.realized_pnl is not None:
             self._trade_pnl[ticker] = self._trade_pnl.get(ticker, 0.0) + fill.realized_pnl
         left = self.broker.get_account().positions.get(ticker)
-        if left is None:   # fully closed: one closed trade, partial fills summed
-            self.risk.record_closed_trade(self._trade_pnl.pop(ticker, 0.0))
+        closed = left is None
+        trade_pnl = self._trade_pnl.pop(ticker, 0.0) if closed else None
+        self.ledger.write("fill", reason=reason, closed=closed, trade_pnl=trade_pnl,
+                          remaining=0.0 if closed else left.qty, **fill.__dict__)
+        if closed:   # one closed trade per round trip; partial fills were summed
+            self.risk.record_closed_trade(trade_pnl)
             return True
         self.ledger.write("risk_event", action="partial_exit", ticker=ticker, remaining=left.qty)
         return False
@@ -55,18 +58,24 @@ class TradingAgent:
         self.ledger.write("equity", phase=phase, equity=acct.equity, cash=acct.cash,
                           drawdown=self.risk.drawdown, daily_loss=self.risk.daily_loss)
 
-    def _flatten(self) -> None:
+    def _flatten(self, attempts: int = 3) -> None:
         reason = self.risk.halt_reason() or "halt"
         self.ledger.write("risk_event", action="flatten", reason=reason)
-        acct = self.broker.get_account()
-        for t in list(acct.positions):
-            self._sell(t, acct.prices.get(t, acct.positions[t].avg_price), reason)
+        for _ in range(attempts):      # retry partial/failed exits within the cycle
+            acct = self.broker.get_account()
+            if not acct.positions:
+                return
+            for t, pos in list(acct.positions.items()):
+                self._sell(t, acct.prices.get(t, pos.avg_price), reason)
         left = list(self.broker.get_account().positions)
         if left:
             self.ledger.write("risk_event", action="flatten_incomplete", remaining=left)
 
     async def run_cycle(self) -> None:
         signals = await self.source()
+        for s_ in signals:      # full input audit trail, including HOLDs and no-op SELLs
+            self.ledger.write("signal", ticker=s_.ticker, action=s_.action,
+                              confidence=s_.confidence, price=s_.price, stop_loss=s_.stop_loss)
         self.broker.update_prices({s.ticker: s.price for s in signals})
         acct = self.broker.get_account()
         self._mark("pre")
@@ -75,7 +84,10 @@ class TradingAgent:
         have = {s.ticker for s in signals}
         for t, pos in acct.positions.items():
             if t not in have:
-                signals.append(TradeSignal(t, "HOLD", 0.0, acct.prices.get(t, pos.avg_price)))
+                px = acct.prices.get(t, pos.avg_price)
+                self.ledger.write("signal", ticker=t, action="HOLD", price=px,
+                                  note="held position, no signal this cycle")
+                signals.append(TradeSignal(t, "HOLD", 0.0, px))
 
         try:
             if self.risk.should_flatten():

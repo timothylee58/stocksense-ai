@@ -93,7 +93,6 @@ position; 60% max gross exposure; 5 max positions; soft drawdown 5% (half size);
    `/api/explain` and `/api/backtest` but **not** by `run_prediction`. So the backtest and SHAP
    currently describe a different model from the one that trades. Without the pickle, the
    predictor silently falls back to a rule-based RSI+MACD signal.
-   *(I earlier said the predictor loads `xgb_<TICKER>.json`; that was wrong.)*
 2. **Ensemble weights differ from the documented 50/30/20.** `run_prediction` uses 60% LSTM
    (7-day forecast direction) and 40% XGBoost, with no FinBERT; its `sentiment_score` is derived
    from RSI/MACD, not news. FinBERT currently feeds `ingest_news`/Supabase, not the signal.

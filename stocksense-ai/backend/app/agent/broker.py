@@ -44,12 +44,13 @@ class SimBroker:
                 return None
             a.cash -= cost
             pos = a.positions.get(ticker)
+            # entry commission is folded into the cost basis so sell PnL reconciles with cash
             if pos:
                 total = pos.qty + qty
-                pos.avg_price = (pos.avg_price * pos.qty + px * qty) / total
+                pos.avg_price = (pos.avg_price * pos.qty + px * qty + self.commission) / total
                 pos.qty = total
             else:
-                a.positions[ticker] = Position(ticker, qty, px, stop_loss)
+                a.positions[ticker] = Position(ticker, qty, (px * qty + self.commission) / qty, stop_loss)
             a.prices[ticker] = price
             return Fill(ticker, "BUY", qty, px, self.commission, None)
         pos = a.positions.get(ticker)

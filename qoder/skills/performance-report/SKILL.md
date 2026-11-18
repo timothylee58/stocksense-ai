@@ -5,11 +5,13 @@ description: Generate the daily results report from the decision ledger. Use at 
 
 # Performance report
 
-1. `python -m app.agent.report --ledger logs/agent_ledger.jsonl > report.md`
+1. `python -m app.agent.report --ledger logs/agent_ledger.jsonl --date YYYY-MM-DD > report.md`
+   (defaults to the latest run in the ledger; `--run-id` picks another; `--date` limits to one UTC day).
 2. Add commentary: what worked, what failed and why, using the rejection reasons and risk
    events in the report. Quote real numbers only.
-3. For the deck, include: strategy thesis, risk limits table, equity/drawdown, trade log,
-   one failure and what changed because of it.
+3. For the deck, take the report's metrics, then source the rest yourself: the risk limits table
+   from the risk-officer skill (`RiskLimits` defaults), the trade log from the `fill` records in
+   the ledger, and equity points from the `equity` records. Add one failure and what changed.
 
 Rules
 - Report paper results as paper results; they do not predict live returns.

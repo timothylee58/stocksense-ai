@@ -1,6 +1,6 @@
 """Summarise the agent ledger as markdown (decisions, fills, PnL, drawdown).
 
-    python -m app.agent.report --ledger logs/agent_ledger.jsonl > report.md
+    python -m app.agent.report --ledger logs/agent_ledger.jsonl [--run-id ID] [--date YYYY-MM-DD]
 """
 from __future__ import annotations
 
@@ -8,6 +8,17 @@ import argparse
 from collections import Counter
 
 from app.agent.ledger import Ledger
+
+
+def select(events: list[dict], run_id: str | None = None, date: str | None = None) -> list[dict]:
+    """One run (default: the latest) and optionally one UTC date (YYYY-MM-DD)."""
+    if run_id is None and events:
+        run_id = next((e["run_id"] for e in reversed(events) if e.get("run_id")), None)
+    if run_id:
+        events = [e for e in events if e.get("run_id") == run_id]
+    if date:
+        events = [e for e in events if str(e.get("ts", "")).startswith(date)]
+    return events
 
 
 def summarise(events: list[dict]) -> dict:
@@ -18,8 +29,10 @@ def summarise(events: list[dict]) -> dict:
         if peak > 0:
             max_dd = max(max_dd, (peak - v) / peak)
     fills = [e for e in events if e["event"] == "fill"]
-    sells = [f for f in fills if f.get("realized_pnl") is not None]
-    wins = [f for f in sells if f["realized_pnl"] > 0]
+    # a closed trade is a round trip that reached zero; its PnL is summed over partial fills
+    closed = [f for f in fills if f.get("closed") and f.get("trade_pnl") is not None]
+    sells = closed
+    wins = [f for f in closed if f["trade_pnl"] > 0]
     decisions = [e for e in events if e["event"] == "decision"]
     rejects = Counter(d["reason"] for d in decisions if not d.get("approved"))
     return {
@@ -29,7 +42,7 @@ def summarise(events: list[dict]) -> dict:
         "max_drawdown_pct": max_dd * 100,
         "n_fills": len(fills),
         "n_closed_trades": len(sells),
-        "realized_pnl": sum(f["realized_pnl"] for f in sells),
+        "realized_pnl": sum(f["trade_pnl"] for f in closed),
         "win_rate_pct": len(wins) / len(sells) * 100 if sells else None,
         "n_decisions": len(decisions),
         "n_approved": sum(1 for d in decisions if d.get("approved")),
@@ -66,4 +79,7 @@ def to_markdown(s: dict) -> str:
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--ledger", default="logs/agent_ledger.jsonl")
-    print(to_markdown(summarise(Ledger(ap.parse_args().ledger).read())), end="")
+    ap.add_argument("--run-id", help="default: the latest run in the ledger")
+    ap.add_argument("--date", help="restrict to one UTC day, YYYY-MM-DD")
+    a = ap.parse_args()
+    print(to_markdown(summarise(select(Ledger(a.ledger).read(), a.run_id, a.date))), end="")
