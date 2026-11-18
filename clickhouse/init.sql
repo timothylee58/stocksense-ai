@@ -78,6 +78,35 @@ CREATE TABLE IF NOT EXISTS stocksense.backtest_results (
 ) ENGINE = ReplacingMergeTree(run_at)
 ORDER BY (ticker, run_at);
 
+-- ── Decision ledger ───────────────────────────────────────────────────────────
+-- Append-only audit trail for every order the agent considered. Rejected
+-- decisions are stored with the same detail as approved ones so judges can
+-- replay what was blocked and why. ReplacingMergeTree dedupes retried writes.
+CREATE TABLE IF NOT EXISTS stocksense.decision_ledger (
+    decision_id         String,
+    idempotency_key     String,
+    event_type          LowCardinality(String),   -- decision | execution
+    status              LowCardinality(String),   -- approved | rejected | submitted | filled | failed
+    account_id          LowCardinality(String),
+    ticker              LowCardinality(String),
+    side                LowCardinality(String),   -- BUY | SELL
+    quantity            Float64,
+    price               Float64,
+    notional            Float64,
+    dry_run             UInt8,
+    reason_codes        Array(String),
+    checks              String,                   -- JSON array of evaluated checks
+    strategy_id         LowCardinality(String),
+    model_version       LowCardinality(String),
+    feature_snapshot    String,                   -- JSON snapshot at decision time
+    order_id            String,
+    message             String,
+    actor               LowCardinality(String),
+    event_time          DateTime64(3, 'UTC'),
+    ingested_at         DateTime DEFAULT now()
+) ENGINE = ReplacingMergeTree(ingested_at)
+ORDER BY (account_id, decision_id, event_type);
+
 -- ── Useful cross-ticker views ────────────────────────────────────────────────
 -- Rolling 30-day volatility (annualised) across all tickers.
 -- Usage: SELECT * FROM stocksense.vol_30d WHERE date = today() ORDER BY ann_vol DESC

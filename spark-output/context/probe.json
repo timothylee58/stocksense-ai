@@ -1,0 +1,443 @@
+{
+  "skill": "probe",
+  "generated_at": "2026-11-18T14:57:01Z",
+  "project_name": "StockSense AI Trading Agent",
+  "research_plan": {
+    "goal": "验证性研究：确认哪些功能扩展最能提升 2026 Moomoo x Qoder AI Trading Agent Challenge 的四项评分，并输出可直接进入开发的需求优先级。",
+    "research_questions": [
+      "参赛者在 2 周窗口内如何把时间分配到策略研究、风控、agent 工程和文档四类工作？哪些环节被放弃或草草了事？",
+      "评委和组织者会从提交物中寻找哪些证据，来判断风控是真正可执行而不是包装？他们会打开哪些文件或页面？",
+      "参赛者首次连接 moomoo MCP、识别比赛模拟账户、试单时，卡点和误操作风险分别在哪里？",
+      "在什么条件下参赛者愿意持续记录决策（含被拒绝的决策）？手动记录的成本与可接受的替代方案是什么？",
+      "StockSense 现有的预测、简报、回测和 dashboard 能承接备赛流程的哪一段，又缺哪一段？"
+    ],
+    "method": "interview",
+    "sample_size": 6,
+    "recruitment_criteria": [
+      "必要条件：已注册 2026 Moomoo x Qoder Challenge，并已获得 moomoo 模拟交易账户访问",
+      "必要条件：过去 7 天内至少运行过一次 Qoder Cloud Agent 或本地 Qoder agent",
+      "加分条件：已配置定时任务或多智能体协作",
+      "加分条件：有真实交易或量化策略经验",
+      "加分条件：曾完整提交过 hackathon 作品",
+      "排除条件：赛事组织者、评委本人、熟人同事（避免熟人偏见）",
+      "样本覆盖：2 个 segment，各至少 2 人 —— 『AI 工程强/交易弱』与『交易强/AI 工程弱』"
+    ],
+    "timeline": "1 周（赛程内）：Day1 招募与大纲定稿；Day2-4 每天 2-3 场访谈；Day5-6 每场 0.5 天整理；Day7 主题收敛与团队 review。若招募不足，用 3 人早期信号 + 挑战赛 FAQ 做交叉验证。",
+    "evidence_mode": "desk_research",
+    "evidence_note": "本轮未执行真人访谈。synthsize 基于 4 个独立证据源（挑战页、Participants Handbook、Qoder Deck、代码库）做案头综合；所有 quote 均为官方文档或代码原文，并已标注来源，不冒充用户原话。"
+  },
+  "interview_guide": {
+    "warmup": [
+      "感谢你抽 45 分钟。今天聊你这两周怎么备赛，没有对错答案，也不会对外引用你的原话。",
+      "先确认背景：你目前主要用本地 Qoder、Cloud Agent，还是两者都用？模拟账户已经开通了吗？"
+    ],
+    "context": [
+      "能带我走一遍你过去 7 天为比赛做的事吗？从打开 Qoder 到产生一个可提交的产物。",
+      "你最近一次让 agent 下一笔模拟单，具体是怎么操作的？从选标的到确认成交。",
+      "你现在怎么判断一个策略『可以上模拟盘』了？会看哪些指标？"
+    ],
+    "deep_dive": [
+      "风控这块你实际写了什么？仓位上限、止损、最大回撤熔断分别怎么定的？",
+      "上一次你决定『不交易』是什么时候？当时看了什么数据？这个决定被记录在哪里了吗？",
+      "你的定时任务或多智能体是怎么配的？失败过吗？你是怎么发现的？",
+      "回测里你怎么处理佣金、点差和滑点？和模拟盘实际结果差多少？",
+      "如果只能改一件事，让评委更相信你的风控是真的，你会改什么？",
+      "当你只有 2 周时，你会先砍掉哪一块工作？为什么？"
+    ],
+    "reaction": [
+      "看这个 Decision Ledger 原型：第一眼你觉得它能帮你拿分吗？为什么？",
+      "这张 Risk Gate 拒绝原因卡片，你会在什么场景用它？会展示给评委吗？",
+      "如果 ops dashboard 只能保留 3 个模块，你留哪 3 个？"
+    ],
+    "wrapup": [
+      "有什么我没问到，但你觉得对比赛特别关键的？",
+      "能引荐 1-2 位同样参赛的朋友吗？"
+    ],
+    "probes": [
+      "追问场景：能再说说当时具体怎么操作的吗？",
+      "追问原因：为什么会这么做？当时在担心什么？",
+      "追问情绪：那一刻你的感受是什么？",
+      "追问结果：最后这件事怎么解决的？花了多久？",
+      "追问对比：和你之前用过的工具比，有什么不同？",
+      "追问证据：如果评委问『你怎么证明』，你会拿什么出来？"
+    ],
+    "bias_warnings": [
+      "引导问题：不要问『你是不是觉得风控很难』，改问『你的风控是怎么做的』。",
+      "假设性问题：不要问『如果有决策日志你会用吗』，改问『过去你怎么向别人解释一次没做的交易』。",
+      "快速跳话题：参与者卡顿时不要替他想，让沉默存在 5 秒。",
+      "追逐解决方案：用户说『我想要 X 功能』时，先问『你为什么想要 X』，再问场景。",
+      "过度同情：不要附和『对啊比赛时间根本不够』，保持中立，避免影响后续回答。",
+      "评委视角偏见：不要向参赛者转述评分权重后立刻问『所以你会做风控吗』，先问行为再问认知。"
+    ]
+  },
+  "participants": [],
+  "evidence_sources": [
+    {
+      "id": "S1",
+      "type": "official_challenge_page",
+      "title": "2026 Moomoo x Qoder AI Trading Agent Challenge",
+      "url": "https://moomoo-qoder-challenge-rgkelnyuzbm.qoder.website/",
+      "used_for": "评审权重、赛程、提交要求、交易规则、FAQ"
+    },
+    {
+      "id": "S2",
+      "type": "official_deck",
+      "title": "Qoder Deck — Compete on evidence, control and clarity",
+      "url": "https://ngynckpj.qwenwork.page",
+      "used_for": "临时评分细则与 5 条证据要求"
+    },
+    {
+      "id": "S3",
+      "type": "codebase",
+      "title": "stocksense-ai @ 382f460",
+      "path": "stocksense-ai",
+      "used_for": "现有能力与缺口盘点"
+    },
+    {
+      "id": "S4",
+      "type": "participant_handbook",
+      "title": "Participant Handbook（挑战页第 1-9 节）",
+      "url": "https://moomoo-qoder-challenge-rgkelnyuzbm.qoder.website/",
+      "used_for": "Cloud Agent、Slack、定时任务、dashboard 配置摩擦"
+    }
+  ],
+  "raw_notes": [],
+  "themes": [
+    {
+      "id": "theme-1",
+      "name": "风控是 30% 主战场，但缺少可执行的盘前闸门",
+      "frequency": 4,
+      "frequency_basis": "4/4 独立证据源（非受访者频次）",
+      "emotional_intensity": "high",
+      "sample_quotes": [
+        "[S1 评审] Strategy & risk design (30%) — robust risk controls, including position limits, drawdown responses, and kill switches.",
+        "[S1 FAQ] You are responsible for defining your agent's strategy-level risk controls.",
+        "[S3 代码库] predictor.py 只有 stop_loss 字段（predictor.py:219），没有仓位上限、组合回撤或熔断逻辑。"
+      ],
+      "related_segments": ["AI 工程强/交易弱", "交易强/AI 工程弱", "评委"]
+    },
+    {
+      "id": "theme-2",
+      "name": "评委要的是可审查的证据链，不是收益曲线",
+      "frequency": 4,
+      "frequency_basis": "4/4 独立证据源",
+      "emotional_intensity": "high",
+      "sample_quotes": [
+        "[S2 Deck] Compete on evidence, control and clarity.",
+        "[S2 Deck] Keep decision logs — Include rejected and failed decisions.",
+        "[S1 提交] a log of trading decisions, trade fills and results, and a demo showing what worked, what failed, and why."
+      ],
+      "related_segments": ["评委", "AI 工程强/交易弱"]
+    },
+    {
+      "id": "theme-3",
+      "name": "Cloud Agent 编排与定时任务是 30% 分项，但配置摩擦高",
+      "frequency": 4,
+      "frequency_basis": "4/4 独立证据源",
+      "emotional_intensity": "high",
+      "sample_quotes": [
+        "[S4 Handbook] Make task instructions self-contained. Avoid instructions such as 'do what we just discussed'.",
+        "[S1 FAQ] Prefer a coordinator agent that runs on a schedule and triggers the other agents when needed.",
+        "[S1 FAQ] Must I use both local Qoder and Cloud Agents? Yes, you must use both of them.",
+        "[S3 代码库] scheduler_service.py 仅 12 行占位，无实际调度实现。"
+      ],
+      "related_segments": ["AI 工程强/交易弱", "交易强/AI 工程弱"]
+    },
+    {
+      "id": "theme-4",
+      "name": "模拟账户身份与权限选择存在误操作风险",
+      "frequency": 2,
+      "frequency_basis": "2/4 独立证据源（FAQ + Handbook）",
+      "emotional_intensity": "high",
+      "sample_quotes": [
+        "[S1 FAQ] During authentication, select Market Data ... do not select the live trading execution or account-order permissions.",
+        "[S1 FAQ] Paper trading accounts have their own identifiers, which the agent can read even if they are not visible in the app.",
+        "[S1 FAQ] Explicitly tell Qoder to use only that account for subsequent competition trades."
+      ],
+      "related_segments": ["交易强/AI 工程弱"]
+    },
+    {
+      "id": "theme-5",
+      "name": "回测没有建模执行摩擦，Sharpe 与模拟盘会失真",
+      "frequency": 3,
+      "frequency_basis": "3/4 独立证据源",
+      "emotional_intensity": "high",
+      "sample_quotes": [
+        "[S2 Deck] Model execution friction — Include costs and partial fills.",
+        "[S1 FAQ] Account for commissions and slippage when evaluating your strategy and recording trades in your journal.",
+        "[S3 代码库] backtest_service.py 的 strat_log = log_ret * position，未扣佣金、点差或滑点。"
+      ],
+      "related_segments": ["交易强/AI 工程弱", "评委"]
+    },
+    {
+      "id": "theme-6",
+      "name": "单标的 long-only 回测难以支撑组合级风险调整收益",
+      "frequency": 2,
+      "frequency_basis": "2/4 独立证据源（代码库 + 评审权重）",
+      "emotional_intensity": "medium",
+      "sample_quotes": [
+        "[S3 代码库] Position: long-only (hold when predicted UP, flat otherwise). No shorting.",
+        "[S3 代码库] walk-forward 针对单一 ticker，无组合权重、行业暴露或相关性约束。"
+      ],
+      "related_segments": ["交易强/AI 工程弱"]
+    },
+    {
+      "id": "theme-7",
+      "name": "比赛账户不可重置，测试会直接烧掉评分资金",
+      "frequency": 1,
+      "frequency_basis": "1/4 独立证据源（FAQ），但失败代价为 blocker",
+      "emotional_intensity": "high",
+      "sample_quotes": [
+        "[S1 FAQ] The competition account cannot be reset. ... To avoid using up competition funds while testing, practise with a separate paper trading account first."
+      ],
+      "related_segments": ["AI 工程强/交易弱", "交易强/AI 工程弱"]
+    },
+    {
+      "id": "theme-8",
+      "name": "提交物要求 deck + 可运行包 + 可复现，复用分占 15%",
+      "frequency": 3,
+      "frequency_basis": "3/4 独立证据源",
+      "emotional_intensity": "medium",
+      "sample_quotes": [
+        "[S1 提交] a Qoder-generated presentation deck together with a runnable trading-agent package.",
+        "[S1 FAQ] Explain your agent design, trading strategy, risk controls and results clearly enough for the judges to assess them.",
+        "[S2 Deck] Make results reproducible — Document how to rerun the work."
+      ],
+      "related_segments": ["评委", "AI 工程强/交易弱"]
+    }
+  ],
+  "jtbd": [
+    {
+      "id": "jtbd-1",
+      "statement": "当我在两周赛程内构建交易 agent 时，我想把风控做成可配置、可审计的闸门，让我能在提交里证明回撤可控，而不是只展示收益。",
+      "context": "2 周窗口、一次性模拟账户、风控占 30% 评分",
+      "outcome": "每笔订单都有风险检查记录，回撤与仓位上限可被评委直接查看",
+      "evidence_theme_ids": ["theme-1", "theme-2", "theme-7"]
+    },
+    {
+      "id": "jtbd-2",
+      "statement": "当我要向评委解释一次交易决策时，我想看到当时所有候选决策（含被拒绝的）及其理由和特征快照，让我能回答‘为什么没做那笔交易’。",
+      "context": "提交 deck 或决赛答辩，评委追问决策依据",
+      "outcome": "一条可筛选、可导出的决策时间线，覆盖 accepted 与 rejected",
+      "evidence_theme_ids": ["theme-2", "theme-8"]
+    },
+    {
+      "id": "jtbd-3",
+      "statement": "当我要让 agent 无人值守运行时，我想用一条自包含的定时任务串起 research → risk → execute，让我不用每天手动触发也能持续产出日志和报告。",
+      "context": "本地 Qoder 与 Cloud Agent 必须同时使用，且需定时运行",
+      "outcome": "每日/每 15 分钟的稳定运行，失败可被发现并告警",
+      "evidence_theme_ids": ["theme-3"]
+    },
+    {
+      "id": "jtbd-4",
+      "statement": "当我在验证策略时，我想在回测里计入佣金、点差、滑点和部分成交，让我看到的 Sharpe 与模拟盘结果可比。",
+      "context": "回测选策略、模拟盘验证、提交风险调整收益",
+      "outcome": "回测与模拟盘偏差可解释，风险调整收益更可信",
+      "evidence_theme_ids": ["theme-5", "theme-6"]
+    },
+    {
+      "id": "jtbd-5",
+      "statement": "当我要把成果复用到下一轮或交给他人时，我想把研究、风控、执行封装成 Skill + 模板 + runbook，让我能一键复现并写进 deck。",
+      "context": "提交要求可运行包与可复现文档，复用分 15%",
+      "outcome": "他人按 runbook 能在 30 分钟内跑起同一套 agent",
+      "evidence_theme_ids": ["theme-8", "theme-3"]
+    }
+  ],
+  "personas": [
+    {
+      "id": "persona-1",
+      "name": "证据型独立开发者",
+      "segment": "AI 工程强 / 交易经验弱",
+      "goals": ["用可审计证据拿到 QCA 与文档分", "把有限时间投入能直接加分的最小功能", "让 agent 稳定无人值守运行"],
+      "frustrations": ["定时任务与多智能体配置摩擦大", "不清楚评委到底看什么", "手动整理决策日志耗时"],
+      "quote": "[S2 Deck] Compete on evidence, control and clarity. / [S1 FAQ] Must I use both local Qoder and Cloud Agents? Yes, you must use both of them."
+    },
+    {
+      "id": "persona-2",
+      "name": "策略优先的交易者",
+      "segment": "交易强 / AI 工程弱",
+      "goals": ["把已有交易论据自动化执行", "用可信风控证明策略不是赌运气", "避免误用实盘权限或错误账户"],
+      "frustrations": ["MCP 权限与模拟账户识别不清", "账户不可重置，试错成本高", "回测与模拟盘结果不一致"],
+      "quote": "[S1 FAQ] You are responsible for defining your agent's strategy-level risk controls. / [S1 FAQ] The competition account cannot be reset."
+    },
+    {
+      "id": "persona-3",
+      "name": "证据审查型评委",
+      "segment": "评委 / 组织者",
+      "goals": ["快速分辨真实风控与包装", "验证结果可复现", "看到失败与被拒绝的决策"],
+      "frustrations": ["只看到收益曲线和截图", "提交物无法重跑", "风控参数没有触发记录"],
+      "quote": "[S2 Deck] Make the evidence inspectable. / [S1 提交] a demo showing what worked, what failed, and why."
+    }
+  ],
+  "emotional_curve": [
+    {"stage": "报名与领取模拟账户", "sentiment": "neutral", "evidence_theme_id": "theme-7"},
+    {"stage": "配置 MCP / Skills / 账户权限", "sentiment": "negative", "evidence_theme_id": "theme-4"},
+    {"stage": "首次试单", "sentiment": "negative", "evidence_theme_id": "theme-7"},
+    {"stage": "搭建策略与回测", "sentiment": "neutral", "evidence_theme_id": "theme-5"},
+    {"stage": "配置 Cloud Agent / 定时 / 多智能体", "sentiment": "negative", "evidence_theme_id": "theme-3"},
+    {"stage": "模拟盘运行与监控", "sentiment": "negative", "evidence_theme_id": "theme-1"},
+    {"stage": "整理决策日志与 dashboard", "sentiment": "negative", "evidence_theme_id": "theme-2"},
+    {"stage": "提交 deck 与可运行包", "sentiment": "positive", "evidence_theme_id": "theme-8"},
+    {"stage": "决赛答辩", "sentiment": "neutral", "evidence_theme_id": "theme-2"}
+  ],
+  "pain_points": [
+    {
+      "id": "pain-1",
+      "description": "模拟账户身份与交易权限选择存在歧义，可能在错误账户上试单或消耗比赛资金",
+      "severity": "blocker",
+      "frequency": 2,
+      "evidence_theme_ids": ["theme-4", "theme-7"],
+      "recommended_next_skill": "hmw"
+    },
+    {
+      "id": "pain-2",
+      "description": "缺少可执行的盘前风险闸门（仓位上限、行业暴露、日亏限制、回撤熔断、kill switch）",
+      "severity": "blocker",
+      "frequency": 4,
+      "evidence_theme_ids": ["theme-1"],
+      "recommended_next_skill": "brief"
+    },
+    {
+      "id": "pain-3",
+      "description": "没有记录被拒绝的决策，评委无法审查风控是否真的拦截过交易",
+      "severity": "major",
+      "frequency": 4,
+      "evidence_theme_ids": ["theme-2"],
+      "recommended_next_skill": "brief"
+    },
+    {
+      "id": "pain-4",
+      "description": "Cloud Agent 定时任务与多智能体配置摩擦高，失败发现滞后",
+      "severity": "major",
+      "frequency": 4,
+      "evidence_theme_ids": ["theme-3"],
+      "recommended_next_skill": "journey"
+    },
+    {
+      "id": "pain-5",
+      "description": "回测未计入佣金、点差、滑点与部分成交，风险调整收益失真",
+      "severity": "major",
+      "frequency": 3,
+      "evidence_theme_ids": ["theme-5"],
+      "recommended_next_skill": "brief"
+    },
+    {
+      "id": "pain-6",
+      "description": "单标的 long-only 回测无法回答组合级风险问题",
+      "severity": "major",
+      "frequency": 2,
+      "evidence_theme_ids": ["theme-6"],
+      "recommended_next_skill": "brief"
+    },
+    {
+      "id": "pain-7",
+      "description": "提交物缺少可复现 runbook 与一键重跑方式，复用得分为空",
+      "severity": "major",
+      "frequency": 3,
+      "evidence_theme_ids": ["theme-8"],
+      "recommended_next_skill": "brief"
+    },
+    {
+      "id": "pain-8",
+      "description": "ops 视图缺失：无持仓、P&L、权益曲线、决策流的统一 dashboard",
+      "severity": "major",
+      "frequency": 3,
+      "evidence_theme_ids": ["theme-2", "theme-3"],
+      "recommended_next_skill": "journey"
+    }
+  ],
+  "feature_backlog": [
+    {
+      "id": "F1",
+      "priority": "P0",
+      "feature": "Account Guard + moomoo Execution Adapter（paper-only、账户 allowlist、dry-run）",
+      "rubric": "Strategy & risk 30% + QCA 30%",
+      "hook": "复用 MoomooClient 单例模式（moomoo_fetcher.py:52）；新增 OpenSecTradeContext 封装",
+      "new_files": ["backend/app/data/moomoo_trade_client.py", "backend/app/api/routes/trading.py"]
+    },
+    {
+      "id": "F2",
+      "priority": "P0",
+      "feature": "Pre-trade Risk Gate（仓位上限、行业上限、日亏限制、回撤 kill switch、stop/take-profit）",
+      "rubric": "Strategy & risk 30%",
+      "hook": "读取 predictor 的 stop_loss（predictor.py:219）；limits 进入 config.py；每次下单前同步检查",
+      "new_files": ["backend/app/services/risk_gate.py", "backend/app/schemas/risk.py"]
+    },
+    {
+      "id": "F3",
+      "priority": "P0",
+      "feature": "Decision Ledger（accepted + rejected、reason code、特征快照、模型版本、幂等键）",
+      "rubric": "QCA 30% + Reuse/docs 15%",
+      "hook": "新增 ClickHouse 表，沿用 ch_store 写入模式（ch_store.py:252）",
+      "new_files": ["backend/app/services/decision_ledger.py", "clickhouse/init.sql（新增表）"]
+    },
+    {
+      "id": "F4",
+      "priority": "P1",
+      "feature": "Ops Dashboard（持仓、P&L、权益曲线、回撤、订单、决策流、rejected 原因）",
+      "rubric": "QCA 30% + Risk-adjusted 25%",
+      "hook": "扩展 dashboard 页面与 BacktestPanel 的指标展示；继续用 Recharts（AGENTS.md 约束）",
+      "new_files": ["frontend/src/app/dashboard/ops/page.tsx", "backend/app/api/routes/portfolio.py"]
+    },
+    {
+      "id": "F5",
+      "priority": "P1",
+      "feature": "回测执行摩擦模型（佣金、点差、滑点、部分成交、容量限制）",
+      "rubric": "Risk-adjusted 25% + Reuse/docs 15%",
+      "hook": "扩展 run_backtest（backtest_service.py:36），在 strat_log 中扣除成本并输出摩擦分解",
+      "new_files": ["backend/app/services/execution_model.py"]
+    },
+    {
+      "id": "F6",
+      "priority": "P1",
+      "feature": "Coordinator 定时任务 + Slack 投递（盘前扫描、风险告警、收盘复盘）",
+      "rubric": "QCA 30%",
+      "hook": "实现 scheduler_service.py 占位；任务自包含、显式时区、失败告警",
+      "new_files": ["backend/app/services/scheduler_service.py", "backend/app/api/routes/agents.py"]
+    },
+    {
+      "id": "F7",
+      "priority": "P2",
+      "feature": "Researcher → Risk Auditor → Executor 多智能体编排（版本 pin、共享文件契约）",
+      "rubric": "QCA 30%",
+      "hook": "以现有 briefing_service 作为 researcher（briefing_service.py:79）；风控审计独立会话",
+      "new_files": ["skills/ 或 Qoder Cloud Agent 模板", "AGENTS.md 新增 agent 版本记录段"]
+    },
+    {
+      "id": "F8",
+      "priority": "P2",
+      "feature": "可复用 Skill 包 + runbook + Qoder deck 模板",
+      "rubric": "Reuse/docs 15%",
+      "hook": "把 F1-F6 封装成可安装 skill 与一键复现脚本",
+      "new_files": ["skills/stocksense-agent/SKILL.md", "docs/runbook.md"]
+    },
+    {
+      "id": "F9",
+      "priority": "P2",
+      "feature": "Baseline 对比与样本外报告生成器",
+      "rubric": "Risk-adjusted 25% + Reuse/docs 15%",
+      "hook": "基于 backtest metrics 与 ledger 自动生成 HTML report",
+      "new_files": ["backend/app/services/report_service.py"]
+    }
+  ],
+  "cross_validation_suggestion": {
+    "signal_validation": [
+      "在挑战赛 WhatsApp 群、Kickoff Q&A 与 Qoder 社区里检索『account identifier』『定时任务失败』『MCP 权限』等关键词，验证 theme-3 / theme-4 是否为大样本高频问题",
+      "如果有工单或社区帖子数据，跑 /工单分析 验证 pain-1、pain-4 的频次",
+      "把决赛入围者的 deck 当作可审查证据样本，检查他们是否都展示了决策日志与回撤控制"
+    ],
+    "bench_inspiration": [
+      "看 moomoo 模拟盘与 TradingView Paper Trading 如何呈现持仓/订单/成交",
+      "看 Composer / Alpaca Dashboard 如何把策略回撤与 kill switch 可视化",
+      "看 QuantConnect 的 backtest report 如何分解佣金、滑点与容量"
+    ]
+  },
+  "saturation": {
+    "total_participants": 0,
+    "themes_above_3": 5,
+    "unique_themes_only_1": 1,
+    "new_themes_in_last_2": false,
+    "verdict": "not_saturated",
+    "note": "本轮为案头证据综合，0 位真人受访者，不满足访谈饱和度标准。5 个主题在 3+ 独立文档/代码源中出现，属较强早期信号；theme-7 仅 1 源但失败代价为 blocker，必须保留。"
+  }
+}

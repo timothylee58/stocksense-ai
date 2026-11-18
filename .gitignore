@@ -23,6 +23,7 @@ env/
 mlruns/
 mlflow.db
 stocksense.db
+**/data/decision_ledger.jsonl
 
 # Node
 **/node_modules/
@@ -88,3 +89,4 @@ coverage.xml
 postgres_data/
 redis_data/
 mlflow_data/
+spark-output/context/_session-state.json
