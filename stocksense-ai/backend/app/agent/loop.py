@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import logging
+import os
 from collections.abc import Awaitable, Callable
 
 from app.agent.broker import Broker, SimBroker
@@ -24,17 +25,19 @@ SignalSource = Callable[[], Awaitable[list[TradeSignal]]]
 
 class TradingAgent:
     def __init__(self, broker: Broker, risk: RiskManager, ledger: Ledger, source: SignalSource,
-                 state_path: str | None = None):
+                 state_path: str | None = None, state_unreadable: bool = False):
         self.broker, self.risk, self.ledger, self.source = broker, risk, ledger, source
         self.state_path = state_path
         self.state_ok = True      # False while risk state cannot be saved: entries fail closed
         # a failed save in an earlier process may have lost a closed trade: needs a human ack
         self.unresolved_failure = bool(state_path) and ledger.unresolved_state_failure(ledger.broker)
+        # the state file exists but cannot be loaded: never overwrite it, hold entries for a human
+        self.state_unreadable = state_unreadable
         self._probed = False
 
     def _persist(self) -> None:
         """Save risk state. A write failure must never stop exits: log it and block new entries."""
-        if not self.state_path:
+        if not self.state_path or self.state_unreadable:
             return
         try:
             self.risk.save(self.state_path)
@@ -151,11 +154,12 @@ class TradingAgent:
                 return
 
             # 2) entries, most confident first; never re-buy what we just sold
-            if not self.state_ok or self.unresolved_failure:
+            if not self.state_ok or self.unresolved_failure or self.state_unreadable:
                 self.ledger.write(
                     "risk_event", action="entries_blocked",
-                    reason=("an earlier risk-state save failed; reconcile, then run with "
-                            "--ack-state-failure" if self.unresolved_failure
+                    reason=("risk state file is unreadable; repair or remove it" if self.state_unreadable
+                            else "an earlier risk-state save failed; reconcile, then run with "
+                                 "--ack-state-failure" if self.unresolved_failure
                             else "risk state is not being saved"))
                 return
             for s in sorted((x for x in signals if x.action == "BUY"), key=lambda x: -x.confidence):
@@ -211,12 +215,18 @@ async def _main(args: argparse.Namespace) -> None:
     risk = RiskManager()
     # persist only against a real (paper) account; the in-memory sim restarts at $100k
     state = args.risk_state if args.broker == "moomoo" else None
-    if state and risk.load(state):
+    loaded = bool(state) and risk.load(state)
+    if loaded:
         logger.info("restored risk state from %s", state)
+    unreadable = bool(state) and not loaded and os.path.exists(state)
     ledger = Ledger(args.ledger, broker=args.broker)
     if args.ack_state_failure:
+        if unreadable:
+            # acknowledging would clear the only restart gate while the history is still missing
+            raise SystemExit(f"cannot acknowledge: {state} exists but cannot be loaded; repair it first")
         ledger.write("risk_event", action="state_failure_acknowledged")
-    agent = TradingAgent(broker, risk, ledger, predictor_source(tickers), state_path=state)
+    agent = TradingAgent(broker, risk, ledger, predictor_source(tickers), state_path=state,
+                         state_unreadable=unreadable)
     try:
         for i in range(args.cycles):
             await agent.run_cycle()

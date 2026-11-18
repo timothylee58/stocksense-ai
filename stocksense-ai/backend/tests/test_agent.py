@@ -544,3 +544,62 @@ def test_multi_run_sim_report_end_equity_matches_return():
     s = summarise(ev)
     assert s["end_equity"] == pytest.approx(s["start_equity"] * (1 + s["return_pct"] / 100))
     assert "100,500.00" in s["equity_note"]                # the last run's real balance is disclosed
+
+
+# ── eighth review round ──────────────────────────────────────────────────────
+def test_damaged_ledger_line_does_not_stop_exits_and_holds_entries(tmp_path):
+    path = tmp_path / "l.jsonl"
+    path.write_text('{"event": "equity", "broker": "moomoo"}\n{"event": "fill", "bro')   # truncated
+    led = Ledger(str(path), broker="moomoo")
+    assert led.unresolved_state_failure("moomoo")            # damaged line = unknown = hold entries
+
+    async def stop_out():
+        return [sig(p=90.0, a="HOLD")]
+    a = TradingAgent(_Sim(), rm(), led, stop_out, state_path=str(tmp_path / "risk.json"))
+    a.broker.place_order("NVDA", "BUY", 10, 100.0, 95.0)
+    asyncio.run(a.run_cycle())                               # constructing and running still work
+    assert "NVDA" not in a.broker.get_account().positions    # the stop-loss exit still ran
+
+
+def test_acknowledgement_clears_a_damaged_ledger_gate(tmp_path):
+    path = tmp_path / "l.jsonl"
+    path.write_text('{"event": "x"}\nnot json at all\n')
+    led = Ledger(str(path), broker="moomoo")
+    assert led.unresolved_state_failure("moomoo")
+    led.write("risk_event", action="state_failure_acknowledged")
+    assert not Ledger(str(path), broker="moomoo").unresolved_state_failure("moomoo")
+
+
+def test_write_after_truncated_line_is_not_merged_into_it(tmp_path):
+    path = tmp_path / "l.jsonl"
+    path.write_text('{"event": "fill", "bro')                 # interrupted append, no newline
+    led = Ledger(str(path))
+    led.write("equity", equity=1.0)
+    assert [e["event"] for e in led.read()] == ["equity"]    # the new record survives
+
+
+def test_unreadable_risk_state_is_never_overwritten_and_holds_entries(tmp_path):
+    state = tmp_path / "risk.json"
+    state.write_text("{corrupt")
+
+    async def buy():
+        return [sig()]
+    a = TradingAgent(_Sim(), rm(), Ledger(str(tmp_path / "l.jsonl")), buy,
+                     state_path=str(state), state_unreadable=True)
+    asyncio.run(a.run_cycle())
+    assert state.read_text() == "{corrupt"                   # left for a human to repair
+    assert "NVDA" not in a.broker.get_account().positions
+    assert any("unreadable" in e.get("reason", "") for e in a.ledger.read())
+
+
+def test_sim_report_tolerates_a_run_without_equity_marks():
+    from app.agent.report import summarise, to_markdown
+    ev = [{"event": "equity", "run_id": "r1", "broker": "sim", "equity": 100_000},
+          {"event": "equity", "run_id": "r1", "broker": "sim", "equity": 101_000},
+          {"event": "signal", "run_id": "r2", "broker": "sim"}]          # r2 stopped before a mark
+    s = summarise(ev)
+    assert s["end_equity"] == pytest.approx(101_000)
+    assert "Trading agent report" in to_markdown(s)
+    only_signals = summarise([{"event": "signal", "run_id": "a", "broker": "sim"},
+                              {"event": "signal", "run_id": "b", "broker": "sim"}])
+    assert only_signals["end_equity"] is None

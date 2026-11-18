@@ -99,6 +99,8 @@ if their signal failed.
 | Order not filled in time | Cancelled, final fill state re-polled; failures logged as `order_rejected` (buys and sells) |
 | ClickHouse down | Falls back to Redis/yfinance |
 | Process restart | Stops and risk state persist (Moomoo broker) |
+| Ledger line damaged (interrupted write) | Skipped on read; counts as an unresolved state failure, so entries are held until `--ack-state-failure`; exits and flatten still run. The next write starts on a fresh line |
+| Risk-state file exists but unreadable | Never overwritten; entries held; `--ack-state-failure` is refused until it is repaired or removed |
 | Risk-state file unwritable | Probed before the first order of each run. Exits and flatten still run; failure is logged (`state_persist_failed`); new entries are blocked until the state can be saved again. A failure from an earlier process also blocks entries until a human reconciles and restarts with `--ack-state-failure` (a lost save can mean a closed loss is missing from the saved history) |
 
 ## 8. Known gaps

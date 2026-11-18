@@ -54,7 +54,10 @@ def _equity_summary(events: list[dict]) -> dict:
         start, end, ret, dd = _curve_stats(events)
         return {"start_equity": start, "end_equity": end, "return_pct": ret,
                 "max_drawdown_pct": dd, "equity_note": None}
-    stats = [_curve_stats(r) for r in runs.values()]
+    stats = [st for st in (_curve_stats(r) for r in runs.values()) if st[0] is not None]
+    if not stats:                       # runs exist but none logged an equity mark
+        return {"start_equity": None, "end_equity": None, "return_pct": None,
+                "max_drawdown_pct": 0.0, "equity_note": None}
     growth = 1.0
     for _, _, r, _ in stats:
         growth *= 1 + (r or 0.0) / 100
@@ -63,7 +66,7 @@ def _equity_summary(events: list[dict]) -> dict:
             "end_equity": start * growth if start else None,     # consistent with the return
             "return_pct": (growth - 1) * 100,
             "max_drawdown_pct": max(d for *_, d in stats),
-            "equity_note": (f"{len(runs)} simulator runs measured separately (each restarts at start equity); "
+            "equity_note": (f"{len(stats)} simulator runs measured separately (each restarts at start equity); "
                             f"end equity is the start compounded by each run's return, the last run ended at "
                             f"{stats[-1][1]:,.2f}")}
 

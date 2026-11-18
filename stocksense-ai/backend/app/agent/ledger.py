@@ -38,23 +38,47 @@ class Ledger:
     def write(self, event: str, **data: Any) -> dict:
         rec = {"ts": datetime.now(timezone.utc).isoformat(), "run_id": self.run_id,
                "broker": self.broker, "event": event, **_clean(data)}
+        line = json.dumps(rec, default=str, allow_nan=False) + "\n"
+        # an interrupted earlier append can leave a line without its newline: start a new line so
+        # this record is not merged into (and lost with) the damaged one
+        if os.path.exists(self.path) and os.path.getsize(self.path):
+            with open(self.path, "rb") as f:
+                f.seek(-1, os.SEEK_END)
+                if f.read(1) != b"\n":
+                    line = "\n" + line
         with open(self.path, "a", encoding="utf-8") as f:
-            f.write(json.dumps(rec, default=str, allow_nan=False) + "\n")
+            f.write(line)
         return rec
 
-    def read(self) -> list[dict]:
+    def _lines(self):
+        """Yield (record_or_None, raw_line). None marks a line that is not valid JSON."""
         if not os.path.exists(self.path):
-            return []
+            return
         with open(self.path, encoding="utf-8") as f:
-            return [json.loads(line) for line in f if line.strip()]
+            for raw in f:
+                if not raw.strip():
+                    continue
+                try:
+                    yield json.loads(raw), raw
+                except ValueError:
+                    yield None, raw
+
+    def read(self) -> list[dict]:
+        """All valid records; damaged lines are skipped (see `unresolved_state_failure`)."""
+        return [r for r, _ in self._lines() if r is not None]
 
     def unresolved_state_failure(self, broker: str | None) -> bool:
         """True if the latest state event for this broker is a failed save that no human has
         acknowledged. A failed save can leave closed-trade losses missing from the saved risk
-        state, so a restart must not trade on it unattended."""
+        state, so a restart must not trade on it unattended.
+
+        A damaged ledger line could have been that event, so it counts as an unresolved failure
+        until a later acknowledgement; exits still run, only new entries are held back."""
         latest = None
-        for e in self.read():
-            if e.get("broker") == broker and e.get("action") in (
+        for rec, _raw in self._lines():
+            if rec is None:
+                latest = "state_persist_failed"
+            elif rec.get("broker") == broker and rec.get("action") in (
                     "state_persist_failed", "state_failure_acknowledged"):
-                latest = e["action"]
+                latest = rec["action"]
         return latest == "state_persist_failed"
