@@ -10,15 +10,25 @@ from collections import Counter
 from app.agent.ledger import Ledger
 
 
-def select(events: list[dict], run_id: str | None = None, date: str | None = None) -> list[dict]:
-    """One run (default: the latest) and optionally one UTC date (YYYY-MM-DD)."""
-    if run_id is None and events:
-        run_id = next((e["run_id"] for e in reversed(events) if e.get("run_id")), None)
+def select(events: list[dict], run_id: str | None = None, date: str | None = None,
+           broker: str | None = None) -> list[dict]:
+    """Pick the events to summarise.
+
+    - run_id given: that run only.
+    - date given: every run on that UTC day (YYYY-MM-DD), for one broker.
+    - neither: the latest run.
+    `broker` ("sim" | "moomoo") defaults to the broker of the latest matching event, so
+    dry-run and paper-account equity are never mixed.
+    """
     if run_id:
-        events = [e for e in events if e.get("run_id") == run_id]
+        return [e for e in events if e.get("run_id") == run_id]
     if date:
         events = [e for e in events if str(e.get("ts", "")).startswith(date)]
-    return events
+        if broker is None and events:
+            broker = events[-1].get("broker")
+        return [e for e in events if e.get("broker") == broker] if broker else events
+    latest = next((e["run_id"] for e in reversed(events) if e.get("run_id")), None)
+    return [e for e in events if e.get("run_id") == latest] if latest else events
 
 
 def summarise(events: list[dict]) -> dict:
@@ -80,6 +90,7 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--ledger", default="logs/agent_ledger.jsonl")
     ap.add_argument("--run-id", help="default: the latest run in the ledger")
-    ap.add_argument("--date", help="restrict to one UTC day, YYYY-MM-DD")
+    ap.add_argument("--date", help="all runs on one UTC day, YYYY-MM-DD")
+    ap.add_argument("--broker", choices=["sim", "moomoo"], help="with --date: which broker's runs")
     a = ap.parse_args()
-    print(to_markdown(summarise(select(Ledger(a.ledger).read(), a.run_id, a.date))), end="")
+    print(to_markdown(summarise(select(Ledger(a.ledger).read(), a.run_id, a.date, a.broker))), end="")

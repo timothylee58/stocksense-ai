@@ -356,3 +356,37 @@ def test_closed_loss_is_saved_even_if_account_read_fails(tmp_path):
         asyncio.run(a.run_cycle())
     r2 = RiskManager(RiskLimits(kill_switch_path="/nonexistent/KS"))
     assert r2.load(state) and len(r2.closed_pnls) == 1 and r2.closed_pnls[0] < 0
+
+
+# ── fourth review round ──────────────────────────────────────────────────────
+def test_report_date_includes_all_runs_of_that_day_and_one_broker(tmp_path):
+    from app.agent.report import select
+    path = str(tmp_path / "l.jsonl")
+
+    async def src():
+        return [sig()]
+    for brk in ("moomoo", "moomoo", "sim"):
+        a = TradingAgent(SimBroker(), rm(), Ledger(path, broker=brk), src)
+        asyncio.run(a.run_cycle())
+    ev = Ledger(path).read()
+    today = ev[0]["ts"][:10]
+    moomoo_runs = {e["run_id"] for e in select(ev, date=today, broker="moomoo")}
+    assert len(moomoo_runs) == 2                                  # both earlier runs, not just the latest
+    assert {e["broker"] for e in select(ev, date=today, broker="moomoo")} == {"moomoo"}
+    assert {e["broker"] for e in select(ev, date=today)} == {"sim"}   # default: latest event's broker
+    assert len({e["run_id"] for e in select(ev)}) == 1            # no flags: latest run only
+
+
+def test_orphaned_partial_pnl_is_not_carried_into_next_trade(tmp_path):
+    state = str(tmp_path / "risk.json")
+    r = rm()
+    r.open_trade_pnl["NVDA"] = -500.0        # left over from a position closed outside the agent
+
+    async def src():
+        return [sig(a="HOLD")]
+    a = TradingAgent(SimBroker(), r, Ledger(str(tmp_path / "l.jsonl")), src, state_path=state)
+    asyncio.run(a.run_cycle())
+    assert r.open_trade_pnl == {}
+    assert any(e.get("action") == "orphaned_partial_pnl" for e in a.ledger.read())
+    import json
+    assert json.load(open(state))["open_trade_pnl"] == {}      # cleared state was persisted

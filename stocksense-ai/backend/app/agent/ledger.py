@@ -26,8 +26,10 @@ def _clean(v: Any) -> Any:
 
 
 class Ledger:
-    def __init__(self, path: str = "logs/agent_ledger.jsonl", run_id: str | None = None):
+    def __init__(self, path: str = "logs/agent_ledger.jsonl", run_id: str | None = None,
+                 broker: str | None = None):
         self.path = path
+        self.broker = broker      # "sim" | "moomoo": keeps dry runs apart from paper-account runs
         self.run_id = run_id or f"{datetime.now(timezone.utc):%Y%m%dT%H%M%S}-{uuid.uuid4().hex[:6]}"
         d = os.path.dirname(path)
         if d:
@@ -35,7 +37,7 @@ class Ledger:
 
     def write(self, event: str, **data: Any) -> dict:
         rec = {"ts": datetime.now(timezone.utc).isoformat(), "run_id": self.run_id,
-               "event": event, **_clean(data)}
+               "broker": self.broker, "event": event, **_clean(data)}
         with open(self.path, "a", encoding="utf-8") as f:
             f.write(json.dumps(rec, default=str, allow_nan=False) + "\n")
         return rec

@@ -28,7 +28,8 @@ gross-exposure or cash cap is not halved further.
 
 Procedures
 - Audit: read `logs/agent_ledger.jsonl` and list every rejected decision with its reason.
-- Kill switch: `touch stocksense-ai/backend/KILL_SWITCH` (the default path is anchored to the
+- Kill switch: from `stocksense-ai/backend` run `touch KILL_SWITCH`; from anywhere in the repo run
+  `touch "$(git rev-parse --show-toplevel)/stocksense-ai/backend/KILL_SWITCH"` (the default path is anchored to the
   backend directory, so it works from any working directory). The next cycle flattens all
   positions and blocks entries. Remove the file only after a human decides to resume.
 - Exits (stop-loss, SELL) are never blocked.

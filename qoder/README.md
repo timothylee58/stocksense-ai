@@ -31,4 +31,4 @@ See `agents/orchestrator.md` for handoffs, the veto rule and the schedule.
 ## Safety
 
 The Moomoo broker is hard-wired to the simulated environment. The kill switch
-(`touch stocksense-ai/backend/KILL_SWITCH`; the path is anchored to the backend directory) flattens the book on the next cycle.
+(`touch KILL_SWITCH` from `stocksense-ai/backend`, or `touch "$(git rev-parse --show-toplevel)/stocksense-ai/backend/KILL_SWITCH"` from anywhere in the repo; the path is anchored to the backend directory) flattens the book on the next cycle.

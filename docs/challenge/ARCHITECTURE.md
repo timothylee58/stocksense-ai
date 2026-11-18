@@ -45,7 +45,7 @@ Each Qoder agent is a thin operator over a repo command; trading logic stays in 
 | Risk gate | `app/agent/risk.py` | Pre-trade checks, sizing, halts, invalidation |
 | Broker | `app/agent/broker.py`, `app/agent/moomoo_broker.py` | `Broker` protocol; in-memory sim; Moomoo SIMULATE adapter |
 | Ledger | `app/agent/ledger.py` | Append-only JSONL: signal, decision, fill, risk_event, equity; each record carries a `run_id` |
-| Report | `app/agent/report.py` | Markdown summary of one run (latest by default) or one UTC day |
+| Report | `app/agent/report.py` | Markdown summary of the latest run, one `--run-id`, or all runs on a `--date` for one `--broker` |
 | Agent specs | `qoder/` | Skills + orchestrator (drafts) |
 
 ## 3. Cycle sequence
@@ -105,7 +105,7 @@ if their signal failed.
 - **Commission on Moomoo fills is reported as 0 and sell PnL is gross**, because the order API call used does not return fees. Closed-trade PnL, invalidation and win rate are therefore slightly optimistic on the Moomoo path (the sim broker includes costs). Querying fees is a follow-up.
 - Invalidation latches until a human resets it (`logs/risk_state.json` for Moomoo; delete the file or `reset_invalidation()`).
 - In soft drawdown only the risk and per-position size terms are halved; a binding gross-exposure or cash cap is not halved further.
-- The report covers one run or one UTC day; it does not merge runs.
+- The report never mixes brokers: `--date` merges every run of one broker on that day (sim runs each restart at $100k, so a multi-run sim day is not a continuous curve). Partial-exit PnL for a position closed outside the agent is dropped and logged as `orphaned_partial_pnl`.
 
 See PRD section 8: the model that trades is not the model that is backtested/explained, the
 ensemble weights differ from documentation, and the Moomoo adapter is untested against a real

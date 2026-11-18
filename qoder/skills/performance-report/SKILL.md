@@ -6,7 +6,9 @@ description: Generate the daily results report from the decision ledger. Use at 
 # Performance report
 
 1. `python -m app.agent.report --ledger logs/agent_ledger.jsonl --date YYYY-MM-DD > report.md`
-   (defaults to the latest run in the ledger; `--run-id` picks another; `--date` limits to one UTC day).
+   (without flags it reports the latest run; `--run-id` picks one run; `--date` reports every run on
+   that UTC day for one broker, `--broker sim|moomoo`, defaulting to the broker of the latest event
+   that day, so dry-run and paper-account equity are never mixed).
 2. Add commentary: what worked, what failed and why, using the rejection reasons and risk
    events in the report. Quote real numbers only.
 3. For the deck, take the report's metrics, then source the rest yourself: the risk limits table

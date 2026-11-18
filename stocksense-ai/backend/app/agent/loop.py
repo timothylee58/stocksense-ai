@@ -61,6 +61,17 @@ class TradingAgent:
             self.ledger.write("risk_event", action="partial_exit", ticker=ticker, remaining=remaining)
         return closed
 
+    def _reconcile(self, acct) -> None:
+        """Drop partial-exit PnL whose position no longer exists (closed outside the agent).
+
+        It is keyed by ticker only, so keeping it would leak into the next round trip.
+        """
+        for t in [t for t in self.risk.open_trade_pnl if t not in acct.positions]:
+            lost = self.risk.open_trade_pnl.pop(t)
+            self.ledger.write("risk_event", action="orphaned_partial_pnl", ticker=t, pnl=lost,
+                              note="position closed outside the agent; PnL not carried forward")
+        self._persist()
+
     def _mark(self, phase: str) -> None:
         acct = self.broker.get_account()
         self.risk.mark(acct.equity, utcnow())
@@ -87,6 +98,7 @@ class TradingAgent:
                               confidence=s_.confidence, price=s_.price, stop_loss=s_.stop_loss)
         self.broker.update_prices({s.ticker: s.price for s in signals})
         acct = self.broker.get_account()
+        self._reconcile(acct)
         self._mark("pre")
 
         # held positions whose signal is missing still need their stops checked
@@ -133,6 +145,7 @@ class TradingAgent:
                 stop = effective_stop(s, self.risk.limits)   # same stop as used for sizing
                 fill = self.broker.place_order(s.ticker, "BUY", d.qty, s.price, stop)
                 if fill:
+                    self.risk.open_trade_pnl.pop(s.ticker, None)   # a new round trip starts clean
                     self.ledger.write("fill", reason="entry", stop_loss=stop, **fill.__dict__)
                 else:
                     self.ledger.write("risk_event", action="order_rejected", side="BUY", ticker=s.ticker)
@@ -173,7 +186,7 @@ async def _main(args: argparse.Namespace) -> None:
     state = args.risk_state if args.broker == "moomoo" else None
     if state and risk.load(state):
         logger.info("restored risk state from %s", state)
-    agent = TradingAgent(broker, risk, Ledger(args.ledger), predictor_source(tickers),
+    agent = TradingAgent(broker, risk, Ledger(args.ledger, broker=args.broker), predictor_source(tickers),
                          state_path=state)
     try:
         for i in range(args.cycles):
