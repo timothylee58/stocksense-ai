@@ -212,22 +212,22 @@ async def _main(args: argparse.Namespace) -> None:
         broker: Broker = MoomooSimBroker(cfg.moomoo_host, cfg.moomoo_port, market=args.market)
     else:
         broker = SimBroker()
-    risk = RiskManager()
-    # persist only against a real (paper) account; the in-memory sim restarts at $100k
-    state = args.risk_state if args.broker == "moomoo" else None
-    loaded = bool(state) and risk.load(state)
-    if loaded:
-        logger.info("restored risk state from %s", state)
-    unreadable = bool(state) and not loaded and os.path.exists(state)
-    ledger = Ledger(args.ledger, broker=args.broker)
-    if args.ack_state_failure:
-        if unreadable:
-            # acknowledging would clear the only restart gate while the history is still missing
-            raise SystemExit(f"cannot acknowledge: {state} exists but cannot be loaded; repair it first")
-        ledger.write("risk_event", action="state_failure_acknowledged")
-    agent = TradingAgent(broker, risk, ledger, predictor_source(tickers), state_path=state,
-                         state_unreadable=unreadable)
     try:
+        risk = RiskManager()
+        # persist only against a real (paper) account; the in-memory sim restarts at $100k
+        state = args.risk_state if args.broker == "moomoo" else None
+        loaded = bool(state) and risk.load(state)
+        if loaded:
+            logger.info("restored risk state from %s", state)
+        unreadable = bool(state) and not loaded and os.path.exists(state)
+        ledger = Ledger(args.ledger, broker=args.broker)
+        if args.ack_state_failure:
+            if unreadable:
+                # acknowledging would clear the only restart gate while the history is still missing
+                raise SystemExit(f"cannot acknowledge: {state} exists but cannot be loaded; repair it first")
+            ledger.write("risk_event", action="state_failure_acknowledged")
+        agent = TradingAgent(broker, risk, ledger, predictor_source(tickers), state_path=state,
+                             state_unreadable=unreadable)
         for i in range(args.cycles):
             await agent.run_cycle()
             if i < args.cycles - 1:

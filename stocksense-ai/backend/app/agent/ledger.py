@@ -59,9 +59,11 @@ class Ledger:
                 if not raw.strip():
                     continue
                 try:
-                    yield json.loads(raw), raw
+                    rec = json.loads(raw)
                 except ValueError:
                     yield None, raw
+                    continue
+                yield (rec, raw) if isinstance(rec, dict) else (None, raw)   # [] or 5 is damage too
 
     def read(self) -> list[dict]:
         """All valid records; damaged lines are skipped (see `unresolved_state_failure`)."""

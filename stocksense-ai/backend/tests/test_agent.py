@@ -603,3 +603,61 @@ def test_sim_report_tolerates_a_run_without_equity_marks():
     only_signals = summarise([{"event": "signal", "run_id": "a", "broker": "sim"},
                               {"event": "signal", "run_id": "b", "broker": "sim"}])
     assert only_signals["end_equity"] is None
+
+
+# ── ninth review round ───────────────────────────────────────────────────────
+@pytest.mark.parametrize("bad", [
+    '{"peak_equity": null, "day_start_equity": 1}',          # wrong type
+    '{"peak_equity": 1, "day_start_equity": 1, "closed_pnls": 5}',
+    '{"peak_equity": 1, "day_start_equity": 1, "invalidated": 7}',
+    '[1, 2, 3]',                                             # valid JSON, wrong shape
+    '{"peak_equity": 1}',                                    # missing field
+])
+def test_malformed_risk_state_is_rejected_without_partial_apply(tmp_path, bad):
+    p = tmp_path / "risk.json"
+    p.write_text(bad)
+    r = rm()
+    before = (r.peak_equity, r.day_start_equity, list(r.closed_pnls))
+    assert r.load(str(p)) is False                           # never raises
+    assert (r.peak_equity, r.day_start_equity, list(r.closed_pnls)) == before
+
+
+def test_non_object_ledger_lines_count_as_damage_and_are_skipped(tmp_path):
+    path = tmp_path / "l.jsonl"
+    path.write_text('[]\n5\n"x"\n{"event": "equity", "broker": "moomoo", "equity": 1.0}\n')
+    led = Ledger(str(path), broker="moomoo")
+    assert [e["event"] for e in led.read()] == ["equity"]    # reports skip the non-objects
+    assert led.unresolved_state_failure("moomoo")            # and the startup check does not crash
+    from app.agent.report import summarise
+    assert summarise(led.read())["end_equity"] == 1.0
+
+
+def test_broker_is_closed_even_when_the_acknowledgement_is_refused(tmp_path, monkeypatch):
+    import argparse
+    import sys
+    import types
+
+    closed = []
+
+    class FakeBroker(_Sim):
+        def __init__(self, *a, **k):
+            super().__init__()
+
+        def close(self):
+            closed.append(1)
+
+    monkeypatch.setitem(sys.modules, "app.agent.moomoo_broker",
+                        types.SimpleNamespace(MoomooSimBroker=FakeBroker))
+    monkeypatch.setitem(sys.modules, "app.core.config", types.SimpleNamespace(
+        get_settings=lambda: types.SimpleNamespace(moomoo_host="h", moomoo_port=1)))
+    state = tmp_path / "risk.json"
+    state.write_text("{corrupt")
+    args = argparse.Namespace(tickers="NVDA", broker="moomoo", market="US", cycles=1, interval=0,
+                              ledger=str(tmp_path / "l.jsonl"), risk_state=str(state),
+                              ack_state_failure=True)
+    from app.agent.loop import _main
+    with pytest.raises(SystemExit):
+        asyncio.run(_main(args))
+    assert closed == [1]                                     # no leaked trade context
+    assert not any(e.get("action") == "state_failure_acknowledged"
+                   for e in Ledger(str(tmp_path / "l.jsonl")).read())

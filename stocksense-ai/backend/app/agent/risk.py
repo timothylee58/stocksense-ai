@@ -89,18 +89,25 @@ class RiskManager:
         os.replace(tmp, path)
 
     def load(self, path: str) -> bool:
+        """Load saved state. Returns False, changing nothing, for any unreadable or malformed file."""
         try:
             with open(path, encoding="utf-8") as f:
                 st = json.load(f)
-            self.peak_equity = float(st["peak_equity"])
-            self.day = date.fromisoformat(st["day"]) if st.get("day") else None
-            self.day_start_equity = float(st["day_start_equity"])
-            self.closed_pnls = [float(x) for x in st.get("closed_pnls", [])]
-            self.invalidated = st.get("invalidated")
-            self.open_trade_pnl = {k: float(v) for k, v in st.get("open_trade_pnl", {}).items()}
-            return True
-        except (OSError, ValueError, KeyError):
+            if not isinstance(st, dict):
+                return False
+            peak = float(st["peak_equity"])
+            day = date.fromisoformat(st["day"]) if st.get("day") else None
+            day_start = float(st["day_start_equity"])
+            closed = [float(x) for x in st.get("closed_pnls", [])]
+            invalidated = st.get("invalidated")
+            if invalidated is not None and not isinstance(invalidated, str):
+                return False
+            open_pnl = {str(k): float(v) for k, v in st.get("open_trade_pnl", {}).items()}
+        except (OSError, ValueError, KeyError, TypeError, AttributeError):
             return False
+        self.peak_equity, self.day, self.day_start_equity = peak, day, day_start
+        self.closed_pnls, self.invalidated, self.open_trade_pnl = closed, invalidated, open_pnl
+        return True
 
     # ── state updates ────────────────────────────────────────────────────────
     def mark(self, equity: float, now: datetime) -> None:
