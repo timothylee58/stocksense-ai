@@ -661,3 +661,34 @@ def test_broker_is_closed_even_when_the_acknowledgement_is_refused(tmp_path, mon
     assert closed == [1]                                     # no leaked trade context
     assert not any(e.get("action") == "state_failure_acknowledged"
                    for e in Ledger(str(tmp_path / "l.jsonl")).read())
+
+
+# ── tenth review round ───────────────────────────────────────────────────────
+@pytest.mark.parametrize("bad", [
+    '{"peak_equity": NaN, "day_start_equity": 1}',
+    '{"peak_equity": Infinity, "day_start_equity": 1}',
+    '{"peak_equity": 1, "day_start_equity": -5}',
+    '{"peak_equity": -1, "day_start_equity": 1}',
+    '{"peak_equity": 1, "day_start_equity": 1, "closed_pnls": [NaN]}',
+    '{"peak_equity": 1, "day_start_equity": 1, "open_trade_pnl": {"X": Infinity}}',
+])
+def test_non_finite_or_negative_risk_state_is_rejected(tmp_path, bad):
+    p = tmp_path / "risk.json"
+    p.write_text(bad)
+    assert rm().load(str(p)) is False
+
+
+def test_valid_initial_state_with_zero_peak_still_loads(tmp_path):
+    p = tmp_path / "risk.json"
+    p.write_text('{"peak_equity": 0, "day_start_equity": 0}')
+    assert rm().load(str(p)) is True
+
+
+def test_non_finite_account_equity_holds_entries_instead_of_disabling_protection():
+    r = rm()
+    r.mark(float("nan"), NOW)                     # bad broker read
+    d = r.evaluate_entry(sig(), SimBroker().get_account())
+    assert not d.approved and "equity" in d.reason
+    assert not r.should_flatten()                 # exits and stops are not blocked by it
+    r.mark(100_000, NOW)                          # a good read clears the hold
+    assert r.evaluate_entry(sig(), SimBroker().get_account()).approved

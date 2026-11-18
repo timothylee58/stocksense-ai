@@ -71,6 +71,7 @@ class RiskManager:
     manual_kill: bool = False
     invalidated: str | None = None      # latched until a human resets it
     open_trade_pnl: dict = field(default_factory=dict)   # realized PnL of partly-closed trades
+    equity_known: bool = True
     _equity: float = 0.0
 
     # ── persistence (survive restarts) ───────────────────────────────────────
@@ -103,6 +104,9 @@ class RiskManager:
             if invalidated is not None and not isinstance(invalidated, str):
                 return False
             open_pnl = {str(k): float(v) for k, v in st.get("open_trade_pnl", {}).items()}
+            numbers = [peak, day_start, *closed, *open_pnl.values()]
+            if not all(math.isfinite(x) for x in numbers) or peak < 0 or day_start < 0:
+                return False       # NaN/inf/negative would silently disable drawdown protection
         except (OSError, ValueError, KeyError, TypeError, AttributeError):
             return False
         self.peak_equity, self.day, self.day_start_equity = peak, day, day_start
@@ -111,6 +115,10 @@ class RiskManager:
 
     # ── state updates ────────────────────────────────────────────────────────
     def mark(self, equity: float, now: datetime) -> None:
+        if not isinstance(equity, (int, float)) or not math.isfinite(equity):
+            self.equity_known = False          # NaN would make every drawdown comparison false
+            return
+        self.equity_known = True
         self._equity = equity
         self.peak_equity = max(self.peak_equity, equity)
         if self.day != now.date():
@@ -146,6 +154,8 @@ class RiskManager:
         lim = self.limits
         if self.kill_switch_active():
             return "kill switch active"
+        if not self.equity_known:
+            return "account equity unavailable or not finite"
         if self.drawdown >= lim.hard_drawdown_pct:
             return f"hard drawdown {self.drawdown:.1%} >= {lim.hard_drawdown_pct:.0%}"
         return self.entry_block_reason()
