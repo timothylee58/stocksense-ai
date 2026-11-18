@@ -58,10 +58,14 @@ def _equity_summary(events: list[dict]) -> dict:
     growth = 1.0
     for _, _, r, _ in stats:
         growth *= 1 + (r or 0.0) / 100
-    return {"start_equity": stats[0][0], "end_equity": stats[-1][1],
+    start = stats[0][0]
+    return {"start_equity": start,
+            "end_equity": start * growth if start else None,     # consistent with the return
             "return_pct": (growth - 1) * 100,
             "max_drawdown_pct": max(d for *_, d in stats),
-            "equity_note": f"{len(runs)} simulator runs measured separately (each restarts at start equity)"}
+            "equity_note": (f"{len(runs)} simulator runs measured separately (each restarts at start equity); "
+                            f"end equity is the start compounded by each run's return, the last run ended at "
+                            f"{stats[-1][1]:,.2f}")}
 
 
 def summarise(events: list[dict]) -> dict:

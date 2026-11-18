@@ -490,3 +490,57 @@ def test_moomoo_multi_run_report_is_one_continuous_curve():
     s = summarise(ev)
     assert s["max_drawdown_pct"] == pytest.approx(5.0)     # 105k peak -> 99.75k across runs
     assert s["equity_note"] is None
+
+
+# ── seventh review round ─────────────────────────────────────────────────────
+def test_restart_after_failed_save_blocks_entries_until_acknowledged(tmp_path):
+    path = str(tmp_path / "l.jsonl")
+    state = str(tmp_path / "risk.json")
+    r1 = rm()
+    r1.save = _broken_save
+
+    async def stop_out():
+        return [sig(p=90.0, a="HOLD")]
+    a1 = TradingAgent(_Sim(), r1, Ledger(path, broker="moomoo"), stop_out, state_path=state)
+    a1.broker.place_order("NVDA", "BUY", 10, 100.0, 95.0)
+    asyncio.run(a1.run_cycle())                 # sells, but the loss could not be saved
+
+    async def buy():
+        return [sig()]
+    # new process: fresh agent, writable state, but the earlier failure is unresolved
+    a2 = TradingAgent(_Sim(), rm(), Ledger(path, broker="moomoo"), buy, state_path=state)
+    assert a2.unresolved_failure
+    asyncio.run(a2.run_cycle())
+    assert "NVDA" not in a2.broker.get_account().positions
+    assert any(e.get("action") == "entries_blocked" and "--ack-state-failure" in e["reason"]
+               for e in a2.ledger.read())
+
+    Ledger(path, broker="moomoo").write("risk_event", action="state_failure_acknowledged")
+    a3 = TradingAgent(_Sim(), rm(), Ledger(path, broker="moomoo"), buy, state_path=state)
+    assert not a3.unresolved_failure
+    asyncio.run(a3.run_cycle())
+    assert "NVDA" in a3.broker.get_account().positions        # trading resumes after the ack
+
+
+def test_unwritable_state_is_detected_before_the_first_order(tmp_path):
+    r = rm()
+    r.save = _broken_save
+
+    async def buy():
+        return [sig()]
+    a = TradingAgent(_Sim(), r, Ledger(str(tmp_path / "l.jsonl")), buy,
+                     state_path=str(tmp_path / "risk.json"))
+    asyncio.run(a.run_cycle())                  # first cycle: probe fails -> no entry at all
+    assert "NVDA" not in a.broker.get_account().positions
+    assert any(e.get("action") == "entries_blocked" for e in a.ledger.read())
+
+
+def test_multi_run_sim_report_end_equity_matches_return():
+    from app.agent.report import summarise
+    ev = []
+    for run, (start, end) in {"r1": (100_000, 101_000), "r2": (100_000, 100_500)}.items():
+        for v in (start, end):
+            ev.append({"event": "equity", "run_id": run, "broker": "sim", "equity": v})
+    s = summarise(ev)
+    assert s["end_equity"] == pytest.approx(s["start_equity"] * (1 + s["return_pct"] / 100))
+    assert "100,500.00" in s["equity_note"]                # the last run's real balance is disclosed

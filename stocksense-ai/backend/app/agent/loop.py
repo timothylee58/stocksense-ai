@@ -28,6 +28,9 @@ class TradingAgent:
         self.broker, self.risk, self.ledger, self.source = broker, risk, ledger, source
         self.state_path = state_path
         self.state_ok = True      # False while risk state cannot be saved: entries fail closed
+        # a failed save in an earlier process may have lost a closed trade: needs a human ack
+        self.unresolved_failure = bool(state_path) and ledger.unresolved_state_failure(ledger.broker)
+        self._probed = False
 
     def _persist(self) -> None:
         """Save risk state. A write failure must never stop exits: log it and block new entries."""
@@ -113,6 +116,9 @@ class TradingAgent:
         self.broker.update_prices({s.ticker: s.price for s in signals})
         acct = self.broker.get_account()
         self._reconcile(acct)
+        if not self._probed:       # find an unwritable state path before any order is placed
+            self._probed = True
+            self._persist()
         self._mark("pre")
 
         # held positions whose signal is missing still need their stops checked
@@ -145,9 +151,12 @@ class TradingAgent:
                 return
 
             # 2) entries, most confident first; never re-buy what we just sold
-            if not self.state_ok:
-                self.ledger.write("risk_event", action="entries_blocked",
-                                  reason="risk state is not being saved")
+            if not self.state_ok or self.unresolved_failure:
+                self.ledger.write(
+                    "risk_event", action="entries_blocked",
+                    reason=("an earlier risk-state save failed; reconcile, then run with "
+                            "--ack-state-failure" if self.unresolved_failure
+                            else "risk state is not being saved"))
                 return
             for s in sorted((x for x in signals if x.action == "BUY"), key=lambda x: -x.confidence):
                 if s.ticker in sold:
@@ -204,8 +213,10 @@ async def _main(args: argparse.Namespace) -> None:
     state = args.risk_state if args.broker == "moomoo" else None
     if state and risk.load(state):
         logger.info("restored risk state from %s", state)
-    agent = TradingAgent(broker, risk, Ledger(args.ledger, broker=args.broker), predictor_source(tickers),
-                         state_path=state)
+    ledger = Ledger(args.ledger, broker=args.broker)
+    if args.ack_state_failure:
+        ledger.write("risk_event", action="state_failure_acknowledged")
+    agent = TradingAgent(broker, risk, ledger, predictor_source(tickers), state_path=state)
     try:
         for i in range(args.cycles):
             await agent.run_cycle()
@@ -227,4 +238,6 @@ if __name__ == "__main__":
     ap.add_argument("--broker", choices=["sim", "moomoo"], default="sim",
                     help="sim = in-memory; moomoo = OpenD paper (SIMULATE) account")
     ap.add_argument("--market", default="US", help="moomoo market for --broker moomoo")
+    ap.add_argument("--ack-state-failure", action="store_true",
+                    help="confirm you reconciled risk state after a failed save; unblocks entries")
     asyncio.run(_main(ap.parse_args()))

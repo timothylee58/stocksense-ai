@@ -22,3 +22,6 @@ Rules
 - Each order can block for about 25 s (20 s waiting for fills plus up to 5 s confirming the cancel
   of any unfilled remainder), and orders are sent one at a time, so a cycle with many orders is slow.
 - Stops are tracked locally in `logs/moomoo_stops.json`.
+- If the ledger shows `entries_blocked` mentioning `--ack-state-failure`, an earlier run could not
+  save its risk state. Do not clear it blindly: check `logs/agent_ledger.jsonl` for sells after the
+  last good save, fix `logs/risk_state.json`, then restart once with `--ack-state-failure`.

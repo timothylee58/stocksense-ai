@@ -47,3 +47,14 @@ class Ledger:
             return []
         with open(self.path, encoding="utf-8") as f:
             return [json.loads(line) for line in f if line.strip()]
+
+    def unresolved_state_failure(self, broker: str | None) -> bool:
+        """True if the latest state event for this broker is a failed save that no human has
+        acknowledged. A failed save can leave closed-trade losses missing from the saved risk
+        state, so a restart must not trade on it unattended."""
+        latest = None
+        for e in self.read():
+            if e.get("broker") == broker and e.get("action") in (
+                    "state_persist_failed", "state_failure_acknowledged"):
+                latest = e["action"]
+        return latest == "state_persist_failed"
