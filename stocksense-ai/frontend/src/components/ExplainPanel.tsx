@@ -38,10 +38,10 @@ function prettyName(f: string): string {
 
 function ContributionBar({ value, max }: { value: number; max: number }) {
   const pct = max > 0 ? Math.min(1, Math.abs(value) / max) : 0;
-  const color = value >= 0 ? "#00ffcc" : "#ff4560";
-  const shadow = value >= 0 ? "0 0 6px rgba(0,255,204,0.4)" : "0 0 6px rgba(255,69,96,0.4)";
+  const color = value >= 0 ? "#1F5E46" : "#A33A31";
+  const shadow = value >= 0 ? "0 0 6px rgba(31,94,70,0.4)" : "0 0 6px rgba(163,58,49,0.4)";
   return (
-    <div style={{ position: "relative", height: 10, borderRadius: 5, background: "rgba(255,255,255,0.04)", overflow: "hidden" }}>
+    <div style={{ position: "relative", height: 10, borderRadius: 5, background: "rgba(23,25,30,0.04)", overflow: "hidden" }}>
       <motion.div
         initial={{ width: 0 }}
         animate={{ width: `${pct * 100}%` }}
@@ -87,12 +87,12 @@ export default function ExplainPanel({ ticker }: { ticker: string }) {
   const shown = expanded ? data?.top_features : data?.top_features.slice(0, 6);
 
   return (
-    <div className="card p-5 mt-4" style={{ background: "rgba(0,12,28,0.8)", border: "1px solid rgba(0,153,255,0.1)", borderRadius: 12 }}>
+    <div className="card p-5 mt-4" style={{ background: "rgba(23,25,30,0.94)", border: "1px solid rgba(66,81,168,0.1)", borderRadius: 12 }}>
       {/* Header */}
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
-          <HelpCircle size={14} style={{ color: "#60a5fa" }} />
-          <span className="orb text-xs font-bold tracking-widest" style={{ color: "#60a5fa" }}>
+          <HelpCircle size={14} style={{ color: "#4251A8" }} />
+          <span className="orb text-xs font-bold tracking-widest" style={{ color: "#4251A8" }}>
             WHY DID IT PREDICT THIS?
           </span>
           {data?.demo && <Badge variant="demo" dot>DEMO</Badge>}
@@ -101,7 +101,7 @@ export default function ExplainPanel({ ticker }: { ticker: string }) {
           onClick={fetch_}
           disabled={loading}
           className="flex items-center gap-1 px-2 py-1 rounded"
-          style={{ fontSize: 10, color: "#2a5070", border: "1px solid rgba(0,153,255,0.1)", background: "transparent", cursor: "pointer" }}
+          style={{ fontSize: 10, color: "#9C978D", border: "1px solid rgba(66,81,168,0.1)", background: "transparent", cursor: "pointer" }}
         >
           <RefreshCw size={10} className={loading ? "animate-spin" : ""} />
           REFRESH
@@ -123,7 +123,7 @@ export default function ExplainPanel({ ticker }: { ticker: string }) {
 
       {/* Error */}
       {!loading && error && (
-        <div className="text-center py-4" style={{ color: "#ff4560", fontSize: 12 }}>
+        <div className="text-center py-4" style={{ color: "#A33A31", fontSize: 12 }}>
           {error.includes("404") ? "No trained model — run `make train` first." : error}
         </div>
       )}
@@ -132,21 +132,21 @@ export default function ExplainPanel({ ticker }: { ticker: string }) {
       {!loading && data && (
         <>
           {/* Summary row */}
-          <div className="flex items-center gap-3 mb-4 pb-3" style={{ borderBottom: "1px solid rgba(0,153,255,0.08)" }}>
-            <span className="mono text-xs" style={{ color: "#2a5070" }}>BASE RATE</span>
-            <span className="mono text-xs" style={{ color: "#94a3b8" }}>{(data.expected_value * 100).toFixed(1)}%</span>
-            <span className="mono text-xs" style={{ color: "#2a5070" }}>→</span>
-            <span className="mono text-xs" style={{ color: "#94a3b8" }}>FINAL</span>
-            <span className="mono text-xs font-bold" style={{ color: data.prediction === "UP" ? "#00ffcc" : "#ff4560" }}>
+          <div className="flex items-center gap-3 mb-4 pb-3" style={{ borderBottom: "1px solid rgba(66,81,168,0.08)" }}>
+            <span className="mono text-xs" style={{ color: "#9C978D" }}>BASE RATE</span>
+            <span className="mono text-xs" style={{ color: "#6E7075" }}>{(data.expected_value * 100).toFixed(1)}%</span>
+            <span className="mono text-xs" style={{ color: "#9C978D" }}>→</span>
+            <span className="mono text-xs" style={{ color: "#6E7075" }}>FINAL</span>
+            <span className="mono text-xs font-bold" style={{ color: data.prediction === "UP" ? "#1F5E46" : "#A33A31" }}>
               {(data.probability * 100).toFixed(1)}% {data.prediction}
             </span>
-            <span className="mono text-xs" style={{ color: "#2a5070", marginLeft: "auto" }}>SHAP · XGBoost</span>
+            <span className="mono text-xs" style={{ color: "#9C978D", marginLeft: "auto" }}>SHAP · XGBoost</span>
           </div>
 
           {/* Legend */}
-          <div className="flex items-center gap-4 mb-3" style={{ fontSize: 9, color: "#2a5070" }}>
-            <span className="flex items-center gap-1"><span style={{ width: 8, height: 8, borderRadius: 2, background: "#00ffcc", display: "inline-block" }} /> Bullish push</span>
-            <span className="flex items-center gap-1"><span style={{ width: 8, height: 8, borderRadius: 2, background: "#ff4560", display: "inline-block" }} /> Bearish push</span>
+          <div className="flex items-center gap-4 mb-3" style={{ fontSize: 9, color: "#9C978D" }}>
+            <span className="flex items-center gap-1"><span style={{ width: 8, height: 8, borderRadius: 2, background: "#1F5E46", display: "inline-block" }} /> Bullish push</span>
+            <span className="flex items-center gap-1"><span style={{ width: 8, height: 8, borderRadius: 2, background: "#A33A31", display: "inline-block" }} /> Bearish push</span>
           </div>
 
           {/* Feature rows */}
@@ -161,14 +161,14 @@ export default function ExplainPanel({ ticker }: { ticker: string }) {
                   className="grid gap-2"
                   style={{ gridTemplateColumns: "140px 1fr 56px 48px", alignItems: "center" }}
                 >
-                  <span className="mono truncate" style={{ fontSize: 10, color: "#94a3b8" }} title={prettyName(f.feature)}>
+                  <span className="mono truncate" style={{ fontSize: 10, color: "#6E7075" }} title={prettyName(f.feature)}>
                     {prettyName(f.feature)}
                   </span>
                   <ContributionBar value={f.contribution} max={maxContrib} />
-                  <span className="mono text-right" style={{ fontSize: 10, color: f.contribution >= 0 ? "#00ffcc" : "#ff4560" }}>
+                  <span className="mono text-right" style={{ fontSize: 10, color: f.contribution >= 0 ? "#1F5E46" : "#A33A31" }}>
                     {f.contribution >= 0 ? "+" : ""}{f.contribution.toFixed(3)}
                   </span>
-                  <span className="mono text-right" style={{ fontSize: 10, color: "#2a5070" }}>
+                  <span className="mono text-right" style={{ fontSize: 10, color: "#9C978D" }}>
                     {Number.isInteger(f.value) ? f.value : f.value.toFixed(2)}
                   </span>
                 </motion.div>
@@ -181,7 +181,7 @@ export default function ExplainPanel({ ticker }: { ticker: string }) {
             <button
               onClick={() => setExpanded(!expanded)}
               className="flex items-center gap-1 mt-3 w-full justify-center"
-              style={{ fontSize: 10, color: "#2a5070", background: "transparent", border: "none", cursor: "pointer" }}
+              style={{ fontSize: 10, color: "#9C978D", background: "transparent", border: "none", cursor: "pointer" }}
             >
               {expanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
               {expanded ? "Show fewer" : `Show ${data.top_features.length - 6} more features`}

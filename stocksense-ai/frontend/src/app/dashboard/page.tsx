@@ -6,13 +6,35 @@ import {
   ResponsiveContainer, ReferenceLine, ComposedChart, Line,
 } from "recharts";
 import { AnimatePresence, motion } from "framer-motion";
-import { TrendingUp, TrendingDown, Minus, Activity, BarChart3,
-         RefreshCw, AlertTriangle, ChevronRight, Upload, CheckCircle2, XCircle } from "lucide-react";
+import { TrendingUp, TrendingDown, AlertTriangle, ChevronRight, Upload, CheckCircle2, XCircle, RefreshCw } from "lucide-react";
 import Link from "next/link";
 import { PredictionResponse, StockInfo } from "@/types/stock";
 import StockBriefingPanel from "@/components/StockBriefingPanel";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+
+// ── Mercury palette ──────────────────────────────────────────────────────────
+const C = {
+  bg: "#F6F4EF",
+  panel: "#FFFFFF",
+  panelAlt: "#FBFAF6",
+  line: "#E6E2D9",
+  lineStrong: "#D8D3C8",
+  ink: "#17191E",
+  inkSoft: "#3C3E44",
+  muted: "#6E7075",
+  faint: "#9C978D",
+  accent: "#1F5E46",
+  accentSoft: "#E9F1EC",
+  danger: "#A33A31",
+  dangerSoft: "#F9EBE8",
+  warn: "#8A6430",
+  warnSoft: "#F7EFE1",
+  info: "#4251A8",
+  infoSoft: "#ECEEF9",
+  plum: "#6B5CA5",
+  track: "#EFEDE7",
+};
 
 // ── Stock universe (mirrors backend) ─────────────────────────────────────────
 const STOCKS: StockInfo[] = [
@@ -35,25 +57,27 @@ const STOCKS: StockInfo[] = [
 
 // ── Color helpers ─────────────────────────────────────────────────────────────
 const SIG_COLOR: Record<string, string> = {
-  BUY: "#00ffcc", SELL: "#ff4560", HOLD: "#f5a623",
+  BUY: C.accent, SELL: C.danger, HOLD: C.warn,
 };
 const TREND_COLOR: Record<string, string> = {
-  BULLISH: "#00ffcc", BEARISH: "#ff4560", SIDEWAYS: "#f5a623",
+  BULLISH: C.accent, BEARISH: C.danger, SIDEWAYS: C.warn,
 };
 const ACTION_COLOR: Record<string, string> = {
-  BUY_NOW: "#00ffcc", WAIT_FOR_DIP: "#0099ff", HOLD: "#f5a623",
-  SELL_NOW: "#ff4560", AVOID: "#ff6b35",
+  BUY_NOW: C.accent, WAIT_FOR_DIP: C.info, HOLD: C.warn,
+  SELL_NOW: C.danger, AVOID: C.danger,
 };
 const RISK_COLOR: Record<string, string> = {
-  LOW: "#00ffcc", MEDIUM: "#f5a623", HIGH: "#ff4560",
+  LOW: C.accent, MEDIUM: C.warn, HIGH: C.danger,
 };
+
+const EASE = [0.22, 1, 0.36, 1] as const;
 
 function pct(v: number) { return (v >= 0 ? "+" : "") + v.toFixed(2) + "%"; }
 function $$(v: number | null | undefined) { return v != null ? "$" + v.toFixed(2) : "—"; }
 function score10Color(s: number) {
-  if (s >= 7) return "#00ffcc";
-  if (s >= 5) return "#f5a623";
-  return "#ff4560";
+  if (s >= 7) return C.accent;
+  if (s >= 5) return C.warn;
+  return C.danger;
 }
 
 // ── Mini sparkline (SVG path) ─────────────────────────────────────────────────
@@ -69,7 +93,7 @@ function Spark({ values, color }: { values: number[]; color: string }) {
   });
   return (
     <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`}>
-      <polyline points={pts.join(" ")} fill="none" stroke={color} strokeWidth={1.5} />
+      <polyline points={pts.join(" ")} fill="none" stroke={color} strokeWidth={1.4} strokeLinecap="round" />
     </svg>
   );
 }
@@ -80,28 +104,28 @@ function TimingGauge({ score }: { score: number }) {
   const pct = (score / 10) * 100;
   return (
     <div className="flex flex-col items-center gap-2">
-      <div className="relative w-28 h-28">
-        <svg viewBox="0 0 100 100" className="w-full h-full -rotate-90">
-          <circle cx="50" cy="50" r="42" fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="10" />
+      <div className="relative h-28 w-28">
+        <svg viewBox="0 0 100 100" className="h-full w-full -rotate-90">
+          <circle cx="50" cy="50" r="42" fill="none" stroke={C.track} strokeWidth="8" />
           <circle
             cx="50" cy="50" r="42"
             fill="none"
             stroke={col}
-            strokeWidth="10"
+            strokeWidth="8"
             strokeDasharray={`${2 * Math.PI * 42 * pct / 100} ${2 * Math.PI * 42 * (1 - pct / 100)}`}
             strokeLinecap="round"
-            style={{ filter: `drop-shadow(0 0 6px ${col})`, transition: "stroke-dasharray 0.8s ease" }}
+            style={{ transition: "stroke-dasharray 0.8s ease" }}
           />
         </svg>
         <div className="absolute inset-0 flex flex-col items-center justify-center">
-          <span className="font-black text-2xl" style={{ color: col, fontFamily: "Orbitron, monospace" }}>
+          <span className="serif text-[26px] font-semibold leading-none" style={{ color: C.ink }}>
             {score.toFixed(1)}
           </span>
-          <span className="text-xs opacity-50" style={{ fontFamily: "Share Tech Mono, monospace" }}>/10</span>
+          <span className="mono text-[9px]" style={{ color: C.faint }}>/10</span>
         </div>
       </div>
-      <span className="text-xs tracking-widest" style={{ fontFamily: "Share Tech Mono, monospace", color: col, opacity: 0.8 }}>
-        TIMING SCORE
+      <span className="mono text-[9px] uppercase tracking-[0.16em]" style={{ color: C.faint }}>
+        Timing score
       </span>
     </div>
   );
@@ -117,20 +141,20 @@ function ProgressFlowState({
   progress: number;
 }) {
   return (
-    <div className="relative w-44 h-10">
+    <div className="relative h-9 w-40">
       <AnimatePresence mode="wait">
         {state === "idle" && (
           <motion.div
             key="idle"
             layout
-            initial={{ opacity: 0, scale: 0.9 }}
+            initial={{ opacity: 0, scale: 0.94 }}
             animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.9 }}
-            className="absolute inset-0 flex items-center justify-center gap-2 rounded-md border"
-            style={{ borderColor: "rgba(0,255,200,0.2)", background: "rgba(0,255,200,0.05)", color: "#00ffcc" }}
+            exit={{ opacity: 0, scale: 0.94 }}
+            className="absolute inset-0 flex items-center justify-center gap-2 rounded-full border"
+            style={{ borderColor: C.line, background: C.panel, color: C.muted }}
           >
-            <Upload size={14} />
-            <span className="mono text-[10px] tracking-widest">IDLE</span>
+            <Upload size={12} />
+            <span className="mono text-[9px] uppercase tracking-[0.12em]">Idle</span>
           </motion.div>
         )}
 
@@ -141,18 +165,19 @@ function ProgressFlowState({
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.95 }}
-            className="absolute inset-0 rounded-md border px-2 py-1.5"
-            style={{ borderColor: "rgba(167,139,250,0.3)", background: "rgba(167,139,250,0.08)" }}
+            className="absolute inset-0 rounded-full border px-3 py-1.5"
+            style={{ borderColor: C.line, background: C.infoSoft }}
           >
-            <div className="flex items-center justify-between text-[10px] mono mb-1" style={{ color: "#d5c9ff" }}>
-              <span className="tracking-widest">UPLOADING</span>
+            <div className="mono flex items-center justify-between text-[9px] uppercase tracking-[0.10em]" style={{ color: C.info }}>
+              <span>Training</span>
               <span>{Math.round(progress)}%</span>
             </div>
-            <div className="h-1 w-full rounded-full" style={{ background: "rgba(255,255,255,0.15)" }}>
+            <div className="mt-1 h-0.5 w-full rounded-full" style={{ background: C.line }}>
               <motion.div
                 animate={{ width: `${progress}%` }}
                 transition={{ ease: "easeOut" }}
-                className="h-1 bg-purple-500 rounded-full"
+                className="h-0.5 rounded-full"
+                style={{ background: C.info }}
               />
             </div>
           </motion.div>
@@ -162,15 +187,15 @@ function ProgressFlowState({
           <motion.div
             key="success"
             layout
-            initial={{ scale: 0.8, opacity: 0 }}
+            initial={{ scale: 0.84, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
-            exit={{ opacity: 0, scale: 0.9 }}
+            exit={{ opacity: 0, scale: 0.94 }}
             transition={{ type: "spring", stiffness: 300, damping: 20 }}
-            className="absolute inset-0 flex items-center justify-center gap-2 rounded-md border"
-            style={{ borderColor: "rgba(0,255,200,0.35)", background: "rgba(0,255,200,0.08)", color: "#00ffcc" }}
+            className="absolute inset-0 flex items-center justify-center gap-2 rounded-full border"
+            style={{ borderColor: C.accent, background: C.accentSoft, color: C.accent }}
           >
-            <CheckCircle2 size={14} />
-            <span className="mono text-[10px] tracking-widest">SUCCESS</span>
+            <CheckCircle2 size={12} />
+            <span className="mono text-[9px] uppercase tracking-[0.12em]">Started</span>
           </motion.div>
         )}
 
@@ -178,14 +203,14 @@ function ProgressFlowState({
           <motion.div
             key="error"
             layout
-            initial={{ opacity: 0, scale: 0.9 }}
+            initial={{ opacity: 0, scale: 0.94 }}
             animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.9 }}
-            className="absolute inset-0 flex items-center justify-center gap-2 rounded-md border"
-            style={{ borderColor: "rgba(255,69,96,0.35)", background: "rgba(255,69,96,0.08)", color: "#ff8094" }}
+            exit={{ opacity: 0, scale: 0.94 }}
+            className="absolute inset-0 flex items-center justify-center gap-2 rounded-full border"
+            style={{ borderColor: C.danger, background: C.dangerSoft, color: C.danger }}
           >
-            <XCircle size={14} />
-            <span className="mono text-[10px] tracking-widest">ERROR</span>
+            <XCircle size={12} />
+            <span className="mono text-[9px] uppercase tracking-[0.12em]">Failed</span>
           </motion.div>
         )}
       </AnimatePresence>
@@ -196,8 +221,9 @@ function ProgressFlowState({
 function Skeleton({ className }: { className?: string }) {
   return (
     <motion.div
-      className={`rounded bg-white/5 ${className ?? ""}`}
-      animate={{ opacity: [0.4, 0.8, 0.4] }}
+      className={`rounded ${className ?? ""}`}
+      style={{ background: "rgba(23,25,30,0.06)" }}
+      animate={{ opacity: [0.35, 0.7, 0.35] }}
       transition={{
         duration: 1.5,
         repeat: Infinity,
@@ -216,43 +242,45 @@ function StockCard({
   signal: string | null; changePct: number | null; spark: number[];
   loading: boolean; onClick: () => void;
 }) {
-  const col = signal ? (SIG_COLOR[signal] ?? "#fff") : "#6a90b0";
+  const col = signal ? (SIG_COLOR[signal] ?? C.ink) : C.muted;
   return (
     <button
       onClick={onClick}
-      className="flex flex-col gap-1 p-3 rounded-lg text-left transition-all"
+      className="flex min-w-[128px] flex-col gap-1 rounded-xl p-3.5 text-left transition-all hover:-translate-y-0.5"
       style={{
-        background: selected ? "rgba(0,255,200,0.06)" : "rgba(0,12,28,0.7)",
-        border: `1px solid ${selected ? "rgba(0,255,200,0.4)" : "rgba(0,153,255,0.08)"}`,
-        minWidth: 120,
+        background: selected ? C.accentSoft : C.panel,
+        border: `1px solid ${selected ? C.accent : C.line}`,
+        boxShadow: selected ? "0 8px 20px rgba(31,94,70,0.08)" : "0 1px 2px rgba(23,25,30,0.03)",
       }}
     >
       <div className="flex items-center justify-between gap-2">
-        <span className="font-black text-xs" style={{ fontFamily: "Orbitron, monospace", color: col }}>
+        <span className="serif text-[13px] font-semibold" style={{ color: selected ? C.accent : C.ink }}>
           {stock.ticker}
         </span>
         {signal && (
-          <span className="text-xs px-1.5 py-0.5 rounded-sm font-bold"
-            style={{ background: `${col}18`, color: col, fontFamily: "Share Tech Mono, monospace", fontSize: 9 }}>
+          <span
+            className="mono rounded-full px-1.5 py-0.5 text-[8px] uppercase tracking-[0.08em]"
+            style={{ background: `${col}14`, color: col, border: `1px solid ${col}2E` }}
+          >
             {signal}
           </span>
         )}
       </div>
-      <span className="text-xs opacity-40 truncate" style={{ fontFamily: "Share Tech Mono, monospace", maxWidth: 100 }}>
+      <span className="truncate text-[10px]" style={{ color: C.faint, maxWidth: 104 }}>
         {stock.name}
       </span>
-      <div className="flex items-end justify-between gap-1 mt-1">
-        <span className="text-sm font-bold" style={{ fontFamily: "Share Tech Mono, monospace", color: "#c8e0f4" }}>
-          {loading ? "..." : price != null ? "$" + price.toFixed(0) : "—"}
+      <div className="mt-1 flex items-end justify-between gap-1">
+        <span className="mono text-[13px] font-bold" style={{ color: C.ink }}>
+          {loading ? "…" : price != null ? "$" + price.toFixed(0) : "—"}
         </span>
         {changePct != null && (
-          <span className="text-xs font-bold" style={{ color: changePct >= 0 ? "#00ffcc" : "#ff4560", fontFamily: "Share Tech Mono, monospace" }}>
+          <span className="mono text-[10px] font-bold" style={{ color: changePct >= 0 ? C.accent : C.danger }}>
             {pct(changePct)}
           </span>
         )}
       </div>
       <div className="mt-1">
-        <Spark values={spark} color={changePct != null && changePct >= 0 ? "#00ffcc" : "#ff4560"} />
+        <Spark values={spark} color={changePct != null && changePct >= 0 ? C.accent : C.danger} />
       </div>
     </button>
   );
@@ -311,7 +339,7 @@ export default function Dashboard() {
   const fetchCardData = useCallback(async () => {
     const results: typeof cardData = {};
     await Promise.allSettled(
-      STOCKS.slice(0, 8).map(async ({ ticker }) => {
+      STOCKS.slice(0, 10).map(async ({ ticker }) => {
         try {
           const res = await fetch(`${API_URL}/api/predict/${ticker}`);
           if (!res.ok) return;
@@ -418,75 +446,90 @@ export default function Dashboard() {
   const timing = data?.timing;
 
   return (
-    <div className="min-h-screen" style={{ background: "#030d1a", fontFamily: "Share Tech Mono, monospace" }}>
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Share+Tech+Mono&display=swap');
-        .orb { font-family: 'Orbitron', monospace; }
-        .mono { font-family: 'Share Tech Mono', monospace; }
-        ::-webkit-scrollbar { width: 4px; height: 4px; }
-        ::-webkit-scrollbar-track { background: transparent; }
-        ::-webkit-scrollbar-thumb { background: rgba(0,255,200,0.15); border-radius: 2px; }
-        .card { background: rgba(0,12,28,0.8); border: 1px solid rgba(0,153,255,0.1); border-radius: 12px; }
-        .metric-card { background: rgba(0,8,20,0.9); border: 1px solid rgba(0,255,200,0.08); border-radius: 10px; transition: border-color 0.3s; }
-        .metric-card:hover { border-color: rgba(0,255,200,0.25); }
-        .nav-btn { background: rgba(0,255,200,0.06); border: 1px solid rgba(0,255,200,0.3); color: #00ffcc; transition: all 0.2s; }
-        .nav-btn:hover { background: rgba(0,255,200,0.12); }
-        .train-btn { background: rgba(0,153,255,0.08); border: 1px solid rgba(0,153,255,0.35); color: #0099ff; transition: all 0.2s; }
-        .train-btn:hover { background: rgba(0,153,255,0.15); }
-      `}</style>
-
+    <div className="min-h-screen" style={{ background: C.bg, color: C.ink }}>
       {/* ── Nav ──────────────────────────────────────────────────────────── */}
-      <nav className="sticky top-0 z-40 flex items-center justify-between px-6 py-3"
-        style={{ background: "rgba(3,13,26,0.92)", backdropFilter: "blur(14px)", borderBottom: "1px solid rgba(0,255,200,0.06)" }}>
-        <div className="flex items-center gap-3">
+      <nav
+        className="sticky top-0 z-40 flex flex-wrap items-center justify-between gap-3 px-5 py-3.5 md:px-8"
+        style={{ background: "rgba(246,244,239,0.90)", backdropFilter: "blur(16px)", borderBottom: `1px solid ${C.line}` }}
+      >
+        <div className="flex flex-wrap items-center gap-3">
           <Link href="/" className="flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full" style={{ background: "#00ffcc", boxShadow: "0 0 8px #00ffcc" }} />
-            <span className="orb text-xs font-bold tracking-widest" style={{ color: "#00ffcc" }}>STOCKSENSE AI</span>
+            <span className="h-1.5 w-1.5 rounded-full" style={{ background: C.accent }} />
+            <span className="serif text-[15px] font-semibold">StockSense</span>
+            <span className="mono text-[8px] uppercase tracking-[0.2em]" style={{ color: C.faint }}>AI</span>
           </Link>
-          <span className="mono text-xs opacity-20" style={{ color: "#c8e0f4" }}>/ dashboard</span>
-          <div className="flex items-center gap-1 ml-2">
-            <Link href="/dashboard/sentiment" className="mono px-2 py-1 rounded"
-              style={{ fontSize: 9, color: "#6a90b0", border: "1px solid rgba(255,255,255,0.06)" }}>
-              SENTIMENT
+          <span className="mono hidden text-[10px] sm:inline" style={{ color: C.lineStrong }}>/</span>
+          <span className="mono hidden text-[10px] uppercase tracking-[0.12em] sm:inline" style={{ color: C.muted }}>Dashboard</span>
+          <div className="no-scrollbar ml-1 flex max-w-full flex-nowrap items-center gap-1.5 overflow-x-auto">
+            <Link href="/dashboard/sentiment" className="pill transition-colors hover:border-[#D8D3C8]">
+              Sentiment
             </Link>
-            <Link href="/dashboard/anomalies" className="mono px-2 py-1 rounded"
-              style={{ fontSize: 9, color: "#6a90b0", border: "1px solid rgba(255,255,255,0.06)" }}>
-              ANOMALIES
+            <Link href="/dashboard/anomalies" className="pill transition-colors hover:border-[#D8D3C8]">
+              Anomalies
             </Link>
-            <Link href="/dashboard/bursa" className="mono px-2 py-1 rounded flex items-center gap-1"
-              style={{ fontSize: 9, color: "#f5a623", border: "1px solid rgba(245,166,35,0.3)", background: "rgba(245,166,35,0.06)" }}>
-              <span style={{ color: "#f5a623" }}>⬡</span> BURSA&amp;SENS
+            <Link
+              href="/dashboard/bursa"
+              className="pill"
+              style={{ color: C.warn, background: C.warnSoft, borderColor: "#E7D9BE" }}
+            >
+              Bursa &amp; Sens
             </Link>
-            <Link href="/dashboard/ops" className="mono px-2 py-1 rounded"
-              style={{ fontSize: 9, color: "#00ffcc", border: "1px solid rgba(0,255,200,0.25)" }}>
-              OPS
+            <Link
+              href="/dashboard/ops"
+              className="pill"
+              style={{ color: C.accent, background: C.accentSoft, borderColor: "#CFE0D5" }}
+            >
+              Ops
             </Link>
           </div>
         </div>
-        <div className="flex items-center gap-3">
-          <ProgressFlowState state={flowState} progress={flowProgress} />
+
+        <div className="flex flex-wrap items-center gap-2.5">
+          <div className="hidden sm:block">
+            <ProgressFlowState state={flowState} progress={flowProgress} />
+          </div>
           {trainStatus && (
-            <span className="mono text-xs px-3 py-1 rounded" style={{ color: "#0099ff", background: "rgba(0,153,255,0.08)", border: "1px solid rgba(0,153,255,0.2)" }}>
+            <span className="mono rounded-full px-3 py-1 text-[9px] uppercase tracking-[0.08em]"
+              style={{ color: C.info, background: C.infoSoft, border: `1px solid ${C.line}` }}>
               {trainStatus}
             </span>
           )}
-          <button onClick={trainModel} disabled={training} className="train-btn orb text-xs font-bold px-4 py-1.5 rounded tracking-widest">
-            {training ? "TRAINING..." : `TRAIN ${activeTicker}`}
+          <button
+            onClick={trainModel}
+            disabled={training}
+            className="mono rounded-full px-4 py-1.5 text-[10px] uppercase tracking-[0.1em] transition-opacity disabled:opacity-50"
+            style={{ background: C.ink, color: C.bg }}
+          >
+            {training ? "Training…" : `Train ${activeTicker}`}
           </button>
-          <button onClick={() => fetchPrediction(activeTicker)} className="nav-btn orb text-xs font-bold px-4 py-1.5 rounded">
-            <RefreshCw size={12} className="inline mr-1.5" />REFRESH
+          <button
+            onClick={() => fetchPrediction(activeTicker)}
+            className="mono flex items-center gap-1.5 rounded-full border px-4 py-1.5 text-[10px] uppercase tracking-[0.1em] transition-colors hover:bg-white"
+            style={{ borderColor: C.lineStrong, color: C.inkSoft, background: C.panel }}
+          >
+            <RefreshCw size={11} /> Refresh
           </button>
         </div>
       </nav>
 
-      <div className="p-5 space-y-5">
+      <div className="mx-auto max-w-[1500px] space-y-5 p-5 md:p-7">
 
-        {/* ── Stock grid ───────────────────────────────────────────────────── */}
-        <div>
-          <div className="mono text-xs mb-3 tracking-widest" style={{ color: "rgba(0,255,200,0.4)" }}>
-            // SELECT STOCK — {STOCKS.length} INSTRUMENTS
+        {/* ── Intro + stock grid ───────────────────────────────────────────── */}
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6, ease: EASE }}
+        >
+          <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
+            <div>
+              <div className="eyebrow mb-2">Paper account · SIMULATE</div>
+              <h1 className="serif text-[28px] font-semibold leading-none md:text-[32px]">Market overview</h1>
+            </div>
+            <span className="mono text-[10px] uppercase tracking-[0.12em]" style={{ color: C.faint }}>
+              {STOCKS.length} instruments
+            </span>
           </div>
-          <div className="flex gap-3 overflow-x-auto pb-2">
+          <div className="no-scrollbar flex gap-2.5 overflow-x-auto pb-2">
             {STOCKS.map((s) => {
               const cd = cardData[s.ticker];
               return (
@@ -504,105 +547,129 @@ export default function Dashboard() {
               );
             })}
           </div>
-        </div>
+        </motion.div>
 
         {error && (
-          <div className="p-4 rounded-lg flex items-center gap-3 mono text-sm"
-            style={{ background: "rgba(255,69,96,0.08)", border: "1px solid rgba(255,69,96,0.25)", color: "#ff8080" }}>
-            <AlertTriangle size={16} />
-            {error} — Model may not be trained yet. Click TRAIN {activeTicker} above.
+          <div className="flex items-center gap-3 rounded-xl px-4 py-3 text-[13px]"
+            style={{ background: C.dangerSoft, border: `1px solid #EBD2CD`, color: C.danger }}>
+            <AlertTriangle size={15} />
+            {error} — Model may not be trained yet. Click Train {activeTicker} above.
           </div>
         )}
 
         {/* ── Hero metrics ─────────────────────────────────────────────────── */}
         {data && (
           <>
-            <div className="flex items-center gap-3 flex-wrap">
-              <div>
-                <span className="orb text-3xl font-black" style={{ color: "#00ffcc" }}>{data.ticker}</span>
-                <span className="mono text-sm ml-3 opacity-50" style={{ color: "#c8e0f4" }}>{data.name}</span>
-                <span className="mono text-xs ml-2 px-2 py-0.5 rounded-sm" style={{ color: "#4a7090", background: "rgba(0,153,255,0.06)", border: "1px solid rgba(0,153,255,0.15)" }}>
-                  {data.sector}
-                </span>
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.55 }}
+              className="flex flex-wrap items-center gap-3"
+            >
+              <div className="flex flex-wrap items-baseline gap-3">
+                <span className="serif text-[32px] font-semibold leading-none">{data.ticker}</span>
+                {data.name && data.name.toUpperCase() !== data.ticker && (
+                  <span className="text-[14px]" style={{ color: C.muted }}>{data.name}</span>
+                )}
+                {data.sector && data.sector.toUpperCase() !== "UNKNOWN" && (
+                  <span className="pill">{data.sector}</span>
+                )}
               </div>
               <div className="ml-auto flex items-center gap-2">
-                <span className="mono text-xs px-2 py-1 rounded"
-                  style={{ color: TREND_COLOR[data.trend], background: `${TREND_COLOR[data.trend]}12`, border: `1px solid ${TREND_COLOR[data.trend]}30` }}>
+                <span
+                  className="pill"
+                  style={{
+                    color: TREND_COLOR[data.trend],
+                    background: `${TREND_COLOR[data.trend]}0F`,
+                    borderColor: `${TREND_COLOR[data.trend]}30`,
+                  }}
+                >
                   {data.trend === "BULLISH" ? "▲" : data.trend === "BEARISH" ? "▼" : "→"} {data.trend}
                 </span>
                 <button
                   onClick={() => toggleWatchlist(data.ticker)}
-                  className="mono text-xs px-3 py-1 rounded transition-colors"
-                  style={{ color: watchlist.includes(data.ticker) ? "#00ffcc" : "#4a7090", border: "1px solid rgba(0,255,200,0.15)" }}>
+                  className="mono rounded-full border px-3.5 py-1.5 text-[10px] uppercase tracking-[0.08em] transition-colors hover:bg-white"
+                  style={{
+                    color: watchlist.includes(data.ticker) ? C.accent : C.muted,
+                    borderColor: watchlist.includes(data.ticker) ? C.accent : C.line,
+                    background: watchlist.includes(data.ticker) ? C.accentSoft : C.panel,
+                  }}
+                >
                   {watchlist.includes(data.ticker) ? "★ Watching" : "☆ Watch"}
                 </button>
               </div>
-            </div>
+            </motion.div>
 
-            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.55, delay: 0.06 }}
+              className="grid grid-cols-2 gap-3 md:grid-cols-4 lg:grid-cols-6"
+            >
               {[
-                { label: "LIVE PRICE", value: $$(livePrice ?? data.current_price), color: "#00ffcc", live: !!livePrice },
-                { label: "7D TARGET", value: $$(data.price_target_7d), sub: pct(data.price_change_pct), color: data.price_change_pct >= 0 ? "#00ffcc" : "#ff4560" },
-                { label: "14D TARGET", value: $$(data.price_target_14d), color: "#0099ff" },
-                { label: "30D TARGET", value: $$(data.price_target_30d), color: "#a78bfa" },
-                { label: "SIGNAL", value: data.signal, color: SIG_COLOR[data.signal] },
-                { label: "CONFIDENCE", value: (data.confidence * 100).toFixed(1) + "%", color: "#f5a623" },
+                { label: "Live price", value: $$(livePrice ?? data.current_price), color: C.ink, live: !!livePrice },
+                { label: "7d target", value: $$(data.price_target_7d), sub: pct(data.price_change_pct), color: C.ink },
+                { label: "14d target", value: $$(data.price_target_14d), color: C.ink },
+                { label: "30d target", value: $$(data.price_target_30d), color: C.ink },
+                { label: "Signal", value: data.signal, color: SIG_COLOR[data.signal] },
+                { label: "Confidence", value: (data.confidence * 100).toFixed(1) + "%", color: C.ink },
               ].map(({ label, value, sub, color, live }) => (
                 <div key={label} className="metric-card p-4">
-                  <div className="mono mb-1.5 flex items-center gap-2" style={{ fontSize: 9, color: "#2a5070", letterSpacing: "0.15em" }}>
+                  <div className="mono mb-2 flex items-center gap-2 text-[9px] uppercase tracking-[0.14em]" style={{ color: C.faint }}>
                     {label}
-                    {live && <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: "#00ffcc" }} />}
+                    {live && <span className="h-1.5 w-1.5 animate-pulse rounded-full" style={{ background: C.accent }} />}
                   </div>
-                  <div className="orb font-black text-xl" style={{ color }}>{value}</div>
-                  {sub && <div className="mono text-xs mt-1" style={{ color }}>{sub}</div>}
+                  <div className="mono text-[18px] font-bold leading-none" style={{ color, fontVariantNumeric: "tabular-nums" }}>
+                    {value}
+                  </div>
+                  {sub && <div className="mono mt-1.5 text-[10px]" style={{ color: data.price_change_pct >= 0 ? C.accent : C.danger }}>{sub}</div>}
                 </div>
               ))}
-            </div>
+            </motion.div>
 
             {/* ── Main layout: chart + side panels ─────────────────────────── */}
-            <div className="grid grid-cols-1 xl:grid-cols-3 gap-5">
+            <div className="grid grid-cols-1 gap-5 xl:grid-cols-3">
 
               {/* Chart (2/3 width) */}
-              <div className="xl:col-span-2 card p-5">
-                <div className="flex items-center justify-between mb-5">
+              <motion.div
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.6, delay: 0.12 }}
+                className="card flex flex-col p-5 xl:col-span-2"
+              >
+                <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
                   <div>
-                    <h3 className="orb text-sm font-bold" style={{ color: "#c8e0f4" }}>
-                      PRICE CHART + 30-DAY FORECAST
-                    </h3>
-                    <p className="mono text-xs mt-1" style={{ color: "#2a5070" }}>
-                      Historical prices · LSTM forecast · 95% confidence band
+                    <h3 className="serif text-[17px] font-semibold">Price &amp; 30-day forecast</h3>
+                    <p className="mt-1 text-[12px]" style={{ color: C.muted }}>
+                      Historical closes · LSTM forecast · 95% confidence band
                     </p>
                   </div>
-                  <div className="flex items-center gap-4 mono text-xs" style={{ color: "#2a5070" }}>
-                    <span className="flex items-center gap-1"><span className="w-3 h-0.5 inline-block" style={{ background: "#00ffcc" }} /> Actual</span>
-                    <span className="flex items-center gap-1"><span className="w-3 h-0.5 inline-block border-t border-dashed" style={{ borderColor: "#0099ff" }} /> Forecast</span>
-                    <span className="flex items-center gap-1"><span className="w-3 h-2 inline-block opacity-30 rounded-sm" style={{ background: "#0099ff" }} /> 95% CI</span>
+                  <div className="mono flex items-center gap-4 text-[9px] uppercase tracking-[0.08em]" style={{ color: C.muted }}>
+                    <span className="flex items-center gap-1.5"><span className="inline-block h-0.5 w-4" style={{ background: C.accent }} /> Actual</span>
+                    <span className="flex items-center gap-1.5"><span className="inline-block w-4 border-t border-dashed" style={{ borderColor: C.info }} /> Forecast</span>
+                    <span className="flex items-center gap-1.5"><span className="inline-block h-2 w-4 rounded-sm" style={{ background: C.infoSoft, border: `1px solid ${C.line}` }} /> 95% CI</span>
                   </div>
                 </div>
 
-                <div style={{ height: 380 }}>
+                <div className="flex-1" style={{ minHeight: 380 }}>
                   <ResponsiveContainer width="100%" height="100%">
                     <ComposedChart data={chartData} margin={{ left: 0, right: 0 }}>
                       <defs>
                         <linearGradient id="areaGrad" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#00ffcc" stopOpacity={0.18} />
-                          <stop offset="95%" stopColor="#00ffcc" stopOpacity={0} />
-                        </linearGradient>
-                        <linearGradient id="foreGrad" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#0099ff" stopOpacity={0.18} />
-                          <stop offset="95%" stopColor="#0099ff" stopOpacity={0} />
+                          <stop offset="5%" stopColor={C.accent} stopOpacity={0.16} />
+                          <stop offset="95%" stopColor={C.accent} stopOpacity={0} />
                         </linearGradient>
                       </defs>
-                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,255,200,0.04)" vertical={false} />
-                      <XAxis dataKey="time" stroke="#1a3a5c" fontSize={10} tickLine={false} axisLine={false}
-                        interval={Math.floor(chartData.length / 8)} tick={{ fontFamily: "Share Tech Mono" }} />
-                      <YAxis stroke="#1a3a5c" fontSize={10} tickLine={false} axisLine={false}
+                      <CartesianGrid strokeDasharray="2 4" stroke={C.track} vertical={false} />
+                      <XAxis dataKey="time" stroke={C.faint} fontSize={10} tickLine={false} axisLine={false}
+                        interval={Math.floor(chartData.length / 8)} tick={{ fontFamily: "Space Mono" }} />
+                      <YAxis stroke={C.faint} fontSize={10} tickLine={false} axisLine={false}
                         domain={["auto", "auto"]} tickFormatter={(v) => "$" + v.toFixed(0)}
-                        tick={{ fontFamily: "Share Tech Mono" }} width={55} />
+                        tick={{ fontFamily: "Space Mono" }} width={55} />
                       <Tooltip
-                        contentStyle={{ background: "#010816", border: "1px solid rgba(0,255,200,0.15)", borderRadius: 8, fontFamily: "Share Tech Mono" }}
-                        itemStyle={{ color: "#00ffcc" }}
-                        labelStyle={{ color: "#4a7090", fontSize: 11 }}
+                        contentStyle={{ background: C.panel, border: `1px solid ${C.line}`, borderRadius: 12, fontFamily: "Space Mono", fontSize: 11, boxShadow: "0 12px 30px rgba(23,25,30,0.08)" }}
+                        itemStyle={{ color: C.ink }}
+                        labelStyle={{ color: C.faint, fontSize: 10 }}
                         formatter={(val, name) => {
                           const v = typeof val === "number" ? val.toFixed(2) : String(val ?? "");
                           if (name === "price")    return ["$" + v, "Price"];
@@ -613,100 +680,119 @@ export default function Dashboard() {
                         }}
                       />
                       {/* Confidence interval area */}
-                      <Area dataKey="upper" stroke="none" fill="#0099ff" fillOpacity={0.06} connectNulls />
-                      <Area dataKey="lower" stroke="none" fill="#030d1a" fillOpacity={1} connectNulls />
+                      <Area dataKey="upper" stroke="none" fill={C.info} fillOpacity={0.08} connectNulls />
+                      <Area dataKey="lower" stroke="none" fill={C.panel} fillOpacity={1} connectNulls />
                       {/* Historical price */}
-                      <Area dataKey="price" stroke="#00ffcc" strokeWidth={2}
+                      <Area dataKey="price" stroke={C.accent} strokeWidth={1.8}
                         fill="url(#areaGrad)" fillOpacity={1} dot={false} connectNulls />
                       {/* Forecast line */}
-                      <Line dataKey="forecast" stroke="#0099ff" strokeWidth={2}
-                        strokeDasharray="5 3" dot={false} connectNulls />
+                      <Line dataKey="forecast" stroke={C.info} strokeWidth={1.8}
+                        strokeDasharray="5 4" dot={false} connectNulls />
                       {/* Today reference */}
                       <ReferenceLine
                         x={data.chart_data[data.chart_data.length - 1]?.time}
-                        stroke="rgba(0,255,200,0.2)" strokeDasharray="3 3" label={{ value: "TODAY", fill: "#2a5070", fontSize: 9, fontFamily: "Share Tech Mono" }}
+                        stroke={C.lineStrong} strokeDasharray="3 3"
+                        label={{ value: "TODAY", fill: C.faint, fontSize: 9, fontFamily: "Space Mono" }}
                       />
                     </ComposedChart>
                   </ResponsiveContainer>
                 </div>
-              </div>
+              </motion.div>
 
               {/* Right column: timing + technicals */}
-              <div className="space-y-4">
+              <div className="space-y-5">
 
                 {/* Timing analysis */}
                 {timing && (
-                  <div className="card p-5">
-                    <div className="mono text-xs mb-4 tracking-widest" style={{ color: "rgba(0,255,200,0.4)" }}>
-                      // TIMING ANALYSIS
-                    </div>
-                    <div className="flex gap-4 items-start">
+                  <motion.div
+                    initial={{ opacity: 0, y: 12 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.6, delay: 0.18 }}
+                    className="card p-5"
+                  >
+                    <div className="eyebrow mb-4">Timing analysis</div>
+                    <div className="flex items-start gap-5">
                       <TimingGauge score={timing.timing_score} />
-                      <div className="flex-1 space-y-2">
+                      <div className="flex-1 space-y-3">
                         <div>
-                          <div className="mono text-xs mb-1" style={{ color: "#2a5070", fontSize: 9, letterSpacing: "0.15em" }}>ACTION</div>
-                          <span className="orb text-xs font-black px-2 py-1 rounded"
-                            style={{ color: ACTION_COLOR[timing.action], background: `${ACTION_COLOR[timing.action]}12`, border: `1px solid ${ACTION_COLOR[timing.action]}30` }}>
+                          <div className="mono mb-1.5 text-[9px] uppercase tracking-[0.14em]" style={{ color: C.faint }}>Action</div>
+                          <span
+                            className="mono inline-flex rounded-full border px-2.5 py-1 text-[10px] uppercase tracking-[0.06em]"
+                            style={{
+                              color: ACTION_COLOR[timing.action],
+                              background: `${ACTION_COLOR[timing.action]}0F`,
+                              borderColor: `${ACTION_COLOR[timing.action]}30`,
+                            }}
+                          >
                             {timing.action.replace(/_/g, " ")}
                           </span>
                         </div>
                         <div>
-                          <div className="mono text-xs mb-1" style={{ color: "#2a5070", fontSize: 9, letterSpacing: "0.15em" }}>RISK</div>
-                          <span className="orb text-xs font-black px-2 py-1 rounded"
-                            style={{ color: RISK_COLOR[timing.risk_level], background: `${RISK_COLOR[timing.risk_level]}12`, border: `1px solid ${RISK_COLOR[timing.risk_level]}30` }}>
+                          <div className="mono mb-1.5 text-[9px] uppercase tracking-[0.14em]" style={{ color: C.faint }}>Risk</div>
+                          <span
+                            className="mono inline-flex rounded-full border px-2.5 py-1 text-[10px] uppercase tracking-[0.06em]"
+                            style={{
+                              color: RISK_COLOR[timing.risk_level],
+                              background: `${RISK_COLOR[timing.risk_level]}0F`,
+                              borderColor: `${RISK_COLOR[timing.risk_level]}30`,
+                            }}
+                          >
                             {timing.risk_level}
                           </span>
                         </div>
                         {timing.days_to_opportunity != null && (
-                          <div className="mono text-xs" style={{ color: "#0099ff" }}>
+                          <div className="mono text-[10px]" style={{ color: C.info }}>
                             ~{timing.days_to_opportunity}d to opportunity
                           </div>
                         )}
                       </div>
                     </div>
 
-                    <div className="mt-4 space-y-2">
+                    <div className="mt-5 space-y-2">
                       {[
-                        { label: "BUY ZONE", value: `${$$(timing.buy_zone_low)} – ${$$(timing.buy_zone_high)}`, color: "#00ffcc" },
-                        { label: "STOP LOSS", value: $$(timing.stop_loss), color: "#ff4560" },
-                      ].map(({ label, value, color }) => (
-                        <div key={label} className="flex justify-between items-center py-1.5 px-3 rounded"
-                          style={{ background: `${color}06`, border: `1px solid ${color}18` }}>
-                          <span className="mono text-xs" style={{ color: "#2a5070", fontSize: 9, letterSpacing: "0.15em" }}>{label}</span>
-                          <span className="orb text-xs font-bold" style={{ color }}>{value}</span>
+                        { label: "Buy zone", value: `${$$(timing.buy_zone_low)} – ${$$(timing.buy_zone_high)}`, color: C.accent, bg: C.accentSoft },
+                        { label: "Stop loss", value: $$(timing.stop_loss), color: C.danger, bg: C.dangerSoft },
+                      ].map(({ label, value, color, bg }) => (
+                        <div key={label} className="flex items-center justify-between rounded-lg px-3 py-2"
+                          style={{ background: bg, border: `1px solid ${C.line}` }}>
+                          <span className="mono text-[9px] uppercase tracking-[0.14em]" style={{ color: C.muted }}>{label}</span>
+                          <span className="mono text-[11px] font-bold" style={{ color }}>{value}</span>
                         </div>
                       ))}
                     </div>
 
                     {timing.rationale.length > 0 && (
-                      <div className="mt-4">
-                        <div className="mono text-xs mb-2" style={{ color: "#2a5070", fontSize: 9, letterSpacing: "0.15em" }}>SIGNALS</div>
+                      <div className="mt-5">
+                        <div className="mono mb-2 text-[9px] uppercase tracking-[0.14em]" style={{ color: C.faint }}>Signals</div>
                         <ul className="space-y-1.5">
                           {timing.rationale.map((r, i) => (
-                            <li key={i} className="flex gap-2 items-start mono text-xs" style={{ color: "#3a6080", lineHeight: 1.5 }}>
-                              <ChevronRight size={10} className="mt-0.5 shrink-0" style={{ color: "#00ffcc" }} />
+                            <li key={i} className="flex items-start gap-2 text-[12px] leading-snug" style={{ color: C.inkSoft }}>
+                              <ChevronRight size={11} className="mt-0.5 shrink-0" style={{ color: C.accent }} />
                               {r}
                             </li>
                           ))}
                         </ul>
                       </div>
                     )}
-                  </div>
+                  </motion.div>
                 )}
 
                 {/* Technical indicators */}
                 {data && (
-                  <div className="card p-5">
-                    <div className="mono text-xs mb-4 tracking-widest" style={{ color: "rgba(0,255,200,0.4)" }}>
-                      // TECHNICAL INDICATORS
-                    </div>
-                    <div className="space-y-3">
+                  <motion.div
+                    initial={{ opacity: 0, y: 12 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.6, delay: 0.24 }}
+                    className="card p-5"
+                  >
+                    <div className="eyebrow mb-4">Technical indicators</div>
+                    <div className="space-y-3.5">
                       {[
                         {
                           label: "RSI (14)",
                           value: data.rsi?.toFixed(1) ?? "—",
                           status: data.rsi != null ? (data.rsi > 70 ? "Overbought" : data.rsi < 30 ? "Oversold" : "Neutral") : "—",
-                          color: data.rsi != null ? (data.rsi > 70 ? "#ff4560" : data.rsi < 30 ? "#00ffcc" : "#f5a623") : "#4a7090",
+                          color: data.rsi != null ? (data.rsi > 70 ? C.danger : data.rsi < 30 ? C.accent : C.warn) : C.faint,
                           bar: data.rsi,
                           barMax: 100,
                         },
@@ -714,7 +800,7 @@ export default function Dashboard() {
                           label: "MACD",
                           value: data.macd != null ? (data.macd >= 0 ? "+" : "") + data.macd.toFixed(2) : "—",
                           status: data.macd != null ? (data.macd > 0 ? "Bullish" : "Bearish") : "—",
-                          color: data.macd != null ? (data.macd > 0 ? "#00ffcc" : "#ff4560") : "#4a7090",
+                          color: data.macd != null ? (data.macd > 0 ? C.accent : C.danger) : C.faint,
                           bar: null,
                           barMax: 100,
                         },
@@ -722,23 +808,23 @@ export default function Dashboard() {
                           label: "Sentiment",
                           value: data.sentiment_score.toFixed(2),
                           status: data.sentiment_score > 0.6 ? "Bullish" : data.sentiment_score < 0.4 ? "Bearish" : "Neutral",
-                          color: data.sentiment_score > 0.6 ? "#00ffcc" : data.sentiment_score < 0.4 ? "#ff4560" : "#f5a623",
+                          color: data.sentiment_score > 0.6 ? C.accent : data.sentiment_score < 0.4 ? C.danger : C.warn,
                           bar: data.sentiment_score * 100,
                           barMax: 100,
                         },
                         {
-                          label: "BB Upper",
+                          label: "BB upper",
                           value: data.bollinger_upper?.toFixed(2) ?? "—",
-                          status: data.current_price > (data.bollinger_upper ?? Infinity) ? "Above Band" : "Below Band",
-                          color: "#a78bfa",
+                          status: data.current_price > (data.bollinger_upper ?? Infinity) ? "Above band" : "Below band",
+                          color: C.plum,
                           bar: null,
                           barMax: 100,
                         },
                         {
-                          label: "BB Lower",
+                          label: "BB lower",
                           value: data.bollinger_lower?.toFixed(2) ?? "—",
-                          status: data.current_price < (data.bollinger_lower ?? 0) ? "Below Band" : "Above Band",
-                          color: "#0099ff",
+                          status: data.current_price < (data.bollinger_lower ?? 0) ? "Below band" : "Above band",
+                          color: C.info,
                           bar: null,
                           barMax: 100,
                         },
@@ -746,59 +832,64 @@ export default function Dashboard() {
                           label: "SMA 20",
                           value: data.sma_20?.toFixed(2) ?? "—",
                           status: data.sma_20 != null ? (data.current_price > data.sma_20 ? "Above" : "Below") : "—",
-                          color: data.sma_20 != null ? (data.current_price > data.sma_20 ? "#00ffcc" : "#ff4560") : "#4a7090",
+                          color: data.sma_20 != null ? (data.current_price > data.sma_20 ? C.accent : C.danger) : C.faint,
                           bar: null,
                           barMax: 100,
                         },
                       ].map(({ label, value, status, color, bar, barMax }) => (
                         <div key={label}>
-                          <div className="flex justify-between items-center mb-1">
-                            <div>
-                              <span className="mono text-xs" style={{ color: "#c8e0f4" }}>{label}</span>
-                              <span className="mono text-xs ml-2" style={{ color: "#2a5070", fontSize: 9 }}>{status}</span>
+                          <div className="mb-1.5 flex items-center justify-between">
+                            <div className="flex items-baseline gap-2">
+                              <span className="mono text-[11px]" style={{ color: C.inkSoft }}>{label}</span>
+                              <span className="mono text-[9px] uppercase tracking-[0.06em]" style={{ color: C.faint }}>{status}</span>
                             </div>
-                            <span className="orb text-xs font-bold" style={{ color }}>{value}</span>
+                            <span className="mono text-[11px] font-bold" style={{ color }}>{value}</span>
                           </div>
                           {bar != null && (
-                            <div className="h-0.5 rounded-full overflow-hidden" style={{ background: "rgba(255,255,255,0.05)" }}>
+                            <div className="h-1 overflow-hidden rounded-full" style={{ background: C.track }}>
                               <div className="h-full rounded-full transition-all duration-700" style={{ width: `${Math.min(100, (bar / barMax) * 100)}%`, background: color }} />
                             </div>
                           )}
                         </div>
                       ))}
                     </div>
-                  </div>
+                  </motion.div>
                 )}
               </div>
             </div>
 
             {/* ── Price targets row ─────────────────────────────────────────── */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <motion.div
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.6, delay: 0.2 }}
+              className="grid grid-cols-1 gap-4 md:grid-cols-3"
+            >
               {[
-                { label: "7-DAY PRICE TARGET", value: data.price_target_7d, current: data.current_price, col: "#00ffcc" },
-                { label: "14-DAY PRICE TARGET", value: data.price_target_14d, current: data.current_price, col: "#0099ff" },
-                { label: "30-DAY PRICE TARGET", value: data.price_target_30d, current: data.current_price, col: "#a78bfa" },
+                { label: "7-day price target", value: data.price_target_7d, current: data.current_price, col: C.accent },
+                { label: "14-day price target", value: data.price_target_14d, current: data.current_price, col: C.info },
+                { label: "30-day price target", value: data.price_target_30d, current: data.current_price, col: C.plum },
               ].map(({ label, value, current, col }) => {
                 const change = ((value - current) / current) * 100;
                 const isUp = change >= 0;
                 return (
-                  <div key={label} className="card p-5 flex items-center justify-between">
+                  <div key={label} className="card flex items-center justify-between p-5">
                     <div>
-                      <div className="mono mb-2" style={{ fontSize: 9, color: "#2a5070", letterSpacing: "0.15em" }}>{label}</div>
-                      <div className="orb text-2xl font-black" style={{ color: col }}>{$$(value)}</div>
-                      <div className="mono text-xs mt-1 flex items-center gap-1" style={{ color: isUp ? "#00ffcc" : "#ff4560" }}>
+                      <div className="mono mb-2 text-[9px] uppercase tracking-[0.14em]" style={{ color: C.faint }}>{label}</div>
+                      <div className="mono text-[24px] font-bold leading-none" style={{ color: C.ink }}>{$$(value)}</div>
+                      <div className="mono mt-2 flex items-center gap-1 text-[10px]" style={{ color: isUp ? C.accent : C.danger }}>
                         {isUp ? <TrendingUp size={12} /> : <TrendingDown size={12} />}
                         {pct(change)} vs current
                       </div>
                     </div>
-                    <div className="w-16 h-16 rounded-full flex items-center justify-center"
-                      style={{ background: `${col}08`, border: `1px solid ${col}20` }}>
-                      {isUp ? <TrendingUp size={24} style={{ color: col }} /> : <TrendingDown size={24} style={{ color: col }} />}
+                    <div className="flex h-12 w-12 items-center justify-center rounded-full"
+                      style={{ background: `${col}0D`, border: `1px solid ${C.line}` }}>
+                      {isUp ? <TrendingUp size={18} style={{ color: col }} /> : <TrendingDown size={18} style={{ color: col }} />}
                     </div>
                   </div>
                 );
               })}
-            </div>
+            </motion.div>
 
             {/* ── AI Stock Briefing ────────────────────────────────────────── */}
             <StockBriefingPanel ticker={activeTicker} />
@@ -808,50 +899,50 @@ export default function Dashboard() {
         {loading && !data && (
           <div className="space-y-5 py-2">
             <div className="card p-5">
-              <Skeleton className="h-6 w-40 mb-2" />
-              <Skeleton className="h-3 w-72 mb-1.5" />
+              <Skeleton className="mb-2 h-6 w-40" />
+              <Skeleton className="mb-2 h-3 w-72" />
               <Skeleton className="h-3 w-56" />
             </div>
 
-            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
+            <div className="grid grid-cols-2 gap-3 md:grid-cols-4 lg:grid-cols-6">
               {Array.from({ length: 6 }).map((_, i) => (
                 <div key={`metric-skeleton-${i}`} className="metric-card p-4">
-                  <Skeleton className="h-3 w-20 mb-3" />
-                  <Skeleton className="h-7 w-16 mb-2" />
+                  <Skeleton className="mb-3 h-3 w-20" />
+                  <Skeleton className="mb-2 h-7 w-16" />
                   <Skeleton className="h-3 w-12" />
                 </div>
               ))}
             </div>
 
-            <div className="grid grid-cols-1 xl:grid-cols-3 gap-5">
-              <div className="xl:col-span-2 card p-5">
-                <Skeleton className="h-5 w-56 mb-2" />
-                <Skeleton className="h-3 w-80 mb-5" />
+            <div className="grid grid-cols-1 gap-5 xl:grid-cols-3">
+              <div className="card p-5 xl:col-span-2">
+                <Skeleton className="mb-2 h-5 w-56" />
+                <Skeleton className="mb-5 h-3 w-80" />
                 <Skeleton className="h-[380px] w-full" />
               </div>
 
-              <div className="space-y-4">
+              <div className="space-y-5">
                 <div className="card p-5">
-                  <Skeleton className="h-4 w-40 mb-4" />
-                  <Skeleton className="h-24 w-full mb-3" />
-                  <Skeleton className="h-3 w-full mb-2" />
-                  <Skeleton className="h-3 w-3/4 mb-2" />
+                  <Skeleton className="mb-4 h-4 w-40" />
+                  <Skeleton className="mb-3 h-24 w-full" />
+                  <Skeleton className="mb-2 h-3 w-full" />
+                  <Skeleton className="mb-2 h-3 w-3/4" />
                   <Skeleton className="h-3 w-4/5" />
                 </div>
                 <div className="card p-5">
-                  <Skeleton className="h-4 w-44 mb-4" />
-                  <Skeleton className="h-3 w-full mb-2" />
-                  <Skeleton className="h-3 w-5/6 mb-2" />
+                  <Skeleton className="mb-4 h-4 w-44" />
+                  <Skeleton className="mb-2 h-3 w-full" />
+                  <Skeleton className="mb-2 h-3 w-5/6" />
                   <Skeleton className="h-3 w-2/3" />
                 </div>
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
               {Array.from({ length: 3 }).map((_, i) => (
                 <div key={`target-skeleton-${i}`} className="card p-5">
-                  <Skeleton className="h-3 w-36 mb-3" />
-                  <Skeleton className="h-8 w-28 mb-2" />
+                  <Skeleton className="mb-3 h-3 w-36" />
+                  <Skeleton className="mb-2 h-8 w-28" />
                   <Skeleton className="h-3 w-24" />
                 </div>
               ))}

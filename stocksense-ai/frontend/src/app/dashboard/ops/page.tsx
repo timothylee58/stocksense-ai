@@ -79,10 +79,10 @@ type Rejection = {
   event_time: string;
 };
 
-const GREEN = "#00ffcc";
-const RED = "#ff4560";
-const AMBER = "#f5a623";
-const BLUE = "#0099ff";
+const GREEN = "#1F5E46";
+const RED = "#A33A31";
+const AMBER = "#8A6430";
+const BLUE = "#4251A8";
 
 function money(v: number) {
   const sign = v < 0 ? "-" : "";
@@ -96,7 +96,7 @@ function signedPct(v: number) {
 function pnlColor(v: number) {
   if (v > 0) return GREEN;
   if (v < 0) return RED;
-  return "#c8e0f4";
+  return "#3C3E44";
 }
 
 function clock(iso: string) {
@@ -125,8 +125,8 @@ function ChartTooltip({
   const value = Number(payload[0]?.value ?? 0);
   return (
     <div className="mono text-xs rounded-md px-3 py-2"
-      style={{ background: "#020a14", border: "1px solid rgba(0,255,200,0.25)", color: "#e2f0ff" }}>
-      <div style={{ color: "#6a90b0" }}>{label}</div>
+      style={{ background: "#FBFAF6", border: "1px solid rgba(31,94,70,0.25)", color: "#17191E" }}>
+      <div style={{ color: "#6E7075" }}>{label}</div>
       <div style={{ color: GREEN }}>{money(value)}</div>
     </div>
   );
@@ -144,11 +144,11 @@ function MetricCard({
   return (
     <div className="metric-card px-4 py-3">
       <div className="flex items-center justify-between">
-        <span className="mono text-[10px] tracking-widest" style={{ color: "#6a90b0" }}>{label}</span>
+        <span className="mono text-[10px] tracking-widest" style={{ color: "#6E7075" }}>{label}</span>
         <span style={{ color }}>{icon}</span>
       </div>
       <div className="orb text-xl font-bold mt-1" style={{ color }}>{value}</div>
-      <div className="mono text-[10px] mt-0.5" style={{ color: "#5d7d99" }}>{sub}</div>
+      <div className="mono text-[10px] mt-0.5" style={{ color: "#6E7075" }}>{sub}</div>
     </div>
   );
 }
@@ -213,40 +213,26 @@ export default function OpsPage() {
   const yDomain: [number, number] = [minEquity - yPad, maxEquity + yPad];
 
   return (
-    <div className="min-h-screen" style={{ background: "#030d1a", fontFamily: "Share Tech Mono, monospace" }}>
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Share+Tech+Mono&display=swap');
-        .orb { font-family: 'Orbitron', monospace; }
-        .mono { font-family: 'Share Tech Mono', monospace; }
-        .card { background: rgba(0,12,28,0.8); border: 1px solid rgba(0,153,255,0.1); border-radius: 12px; }
-        .metric-card { background: rgba(0,8,20,0.9); border: 1px solid rgba(0,255,200,0.08); border-radius: 10px; transition: border-color 0.3s; }
-        .metric-card:hover { border-color: rgba(0,255,200,0.25); }
-        .nav-btn { background: rgba(0,255,200,0.06); border: 1px solid rgba(0,255,200,0.3); color: #00ffcc; transition: all 0.2s; }
-        .nav-btn:hover { background: rgba(0,255,200,0.12); }
-        ::-webkit-scrollbar { width: 4px; height: 4px; }
-        ::-webkit-scrollbar-track { background: transparent; }
-        ::-webkit-scrollbar-thumb { background: rgba(0,255,200,0.15); border-radius: 2px; }
-      `}</style>
-
+    <div className="min-h-screen" style={{ background: "#F6F4EF" }}>
       <nav className="sticky top-0 z-40 flex items-center justify-between px-6 py-3"
-        style={{ background: "rgba(3,13,26,0.92)", backdropFilter: "blur(14px)", borderBottom: "1px solid rgba(0,255,200,0.06)" }}>
+        style={{ background: "rgba(246,244,239,0.92)", backdropFilter: "blur(14px)", borderBottom: "1px solid rgba(31,94,70,0.06)" }}>
         <div className="flex items-center gap-3">
           <Link href="/" className="flex items-center gap-2">
             <span className="w-2 h-2 rounded-full" style={{ background: GREEN, boxShadow: `0 0 8px ${GREEN}` }} />
-            <span className="orb text-xs font-bold tracking-widest" style={{ color: GREEN }}>STOCKSENSE AI</span>
+            <span className="serif text-[15px] font-semibold leading-none" style={{ color: "#17191E" }}>StockSense <span className="mono text-[8px] tracking-[0.16em] align-middle" style={{ color: "#9C978D" }}>AI</span></span>
           </Link>
-          <span className="mono text-xs opacity-20" style={{ color: "#c8e0f4" }}>/ ops</span>
+          <span className="mono text-xs opacity-20" style={{ color: "#3C3E44" }}>/ ops</span>
           <div className="flex items-center gap-1 ml-2">
             <Link href="/dashboard" className="mono px-2 py-1 rounded"
-              style={{ fontSize: 9, color: "#6a90b0", border: "1px solid rgba(255,255,255,0.06)" }}>
+              style={{ fontSize: 9, color: "#6E7075", border: "1px solid rgba(23,25,30,0.06)" }}>
               DASHBOARD
             </Link>
             <Link href="/dashboard/sentiment" className="mono px-2 py-1 rounded"
-              style={{ fontSize: 9, color: "#6a90b0", border: "1px solid rgba(255,255,255,0.06)" }}>
+              style={{ fontSize: 9, color: "#6E7075", border: "1px solid rgba(23,25,30,0.06)" }}>
               SENTIMENT
             </Link>
             <Link href="/dashboard/anomalies" className="mono px-2 py-1 rounded"
-              style={{ fontSize: 9, color: "#6a90b0", border: "1px solid rgba(255,255,255,0.06)" }}>
+              style={{ fontSize: 9, color: "#6E7075", border: "1px solid rgba(23,25,30,0.06)" }}>
               ANOMALIES
             </Link>
             <span className="mono px-2 py-1 rounded flex items-center gap-1"
@@ -256,11 +242,11 @@ export default function OpsPage() {
           </div>
         </div>
         <div className="flex items-center gap-3">
-          <span className="mono text-[10px]" style={{ color: killActive ? RED : "#6a90b0" }}>
+          <span className="mono text-[10px]" style={{ color: killActive ? RED : "#6E7075" }}>
             {killActive ? "KILL SWITCH ACTIVE" : "KILL SWITCH CLEAR"}
           </span>
           <button onClick={load} disabled={loading} className="nav-btn orb text-xs font-bold px-4 py-1.5 rounded">
-            <RefreshCw size={12} className="inline mr-1.5" />{loading ? "LOADING" : "REFRESH"}
+            <RefreshCw size={12} className="inline mr-1.5" />{loading ? "Loading…" : "Refresh"}
           </button>
         </div>
       </nav>
@@ -268,17 +254,17 @@ export default function OpsPage() {
       <main className="max-w-7xl mx-auto px-6 py-6 space-y-5">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
-            <h1 className="orb text-lg font-bold tracking-widest" style={{ color: "#e2f0ff" }}>
-              EXECUTION CONTROL
+            <h1 className="orb text-lg font-bold tracking-widest" style={{ color: "#17191E" }}>
+              Execution control
             </h1>
-            <p className="mono text-[11px] mt-1" style={{ color: "#6a90b0" }}>
+            <p className="mono text-[11px] mt-1" style={{ color: "#6E7075" }}>
               {summary
                 ? `${summary.account.account_id ?? "unknown"} · ${summary.account.trd_env ?? "SIMULATE"} · ${summary.demo ? "DEMO MODE" : "PAPER"} · snapshot ${summary.summary.snapshot_storage}`
                 : "Waiting for the account guard"}
             </p>
           </div>
           {summary && (
-            <span className="mono text-[10px]" style={{ color: "#5d7d99" }}>
+            <span className="mono text-[10px]" style={{ color: "#6E7075" }}>
               <Clock size={10} className="inline mr-1" />
               refreshed {clock(summary.generated_at)} · auto 30s
             </span>
@@ -290,21 +276,21 @@ export default function OpsPage() {
             <AlertTriangle size={16} style={{ color: RED, flexShrink: 0, marginTop: 2 }} />
             <div>
               <div className="mono text-xs" style={{ color: RED }}>ACCOUNT GUARD BLOCKED</div>
-              <div className="mono text-[11px] mt-1" style={{ color: "#c8e0f4" }}>{error}</div>
+              <div className="mono text-[11px] mt-1" style={{ color: "#3C3E44" }}>{error}</div>
             </div>
           </div>
         )}
 
         <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
           <MetricCard label="EQUITY" value={s ? money(s.equity) : "—"} sub="account value"
-            color="#e2f0ff" icon={<Wallet size={14} />} />
+            color="#17191E" icon={<Wallet size={14} />} />
           <MetricCard label="CASH" value={s ? money(s.cash) : "—"} sub="available"
             color={BLUE} icon={<Wallet size={14} />} />
           <MetricCard label="DAY P&L" value={s ? `${money(s.day_pnl)} (${signedPct(s.day_pnl_pct)})` : "—"} sub="today"
-            color={s ? pnlColor(s.day_pnl) : "#c8e0f4"}
+            color={s ? pnlColor(s.day_pnl) : "#3C3E44"}
             icon={s && s.day_pnl < 0 ? <TrendingDown size={14} /> : <TrendingUp size={14} />} />
           <MetricCard label="TOTAL P&L" value={s ? `${money(s.total_pnl)} (${signedPct(s.total_return_pct)})` : "—"} sub={s ? `baseline ${money(s.baseline_equity)}` : "since first snapshot"}
-            color={s ? pnlColor(s.total_pnl) : "#c8e0f4"}
+            color={s ? pnlColor(s.total_pnl) : "#3C3E44"}
             icon={s && s.total_pnl < 0 ? <TrendingDown size={14} /> : <TrendingUp size={14} />} />
           <MetricCard label="EXPOSURE" value={s ? `${s.gross_exposure_pct.toFixed(2)}%` : "—"} sub={s ? `${s.position_count} positions · ${money(s.market_value)}` : "gross"}
             color={s && s.gross_exposure_pct > 90 ? AMBER : GREEN} icon={<BarChart3 size={14} />} />
@@ -316,28 +302,28 @@ export default function OpsPage() {
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
               <Activity size={14} style={{ color: GREEN }} />
-              <span className="orb text-xs font-bold tracking-widest" style={{ color: "#e2f0ff" }}>EQUITY CURVE</span>
+              <span className="orb text-xs font-bold tracking-widest" style={{ color: "#17191E" }}>EQUITY CURVE</span>
             </div>
-            <span className="mono text-[10px]" style={{ color: "#5d7d99" }}>
+            <span className="mono text-[10px]" style={{ color: "#6E7075" }}>
               {curve.length} snapshot{curve.length === 1 ? "" : "s"} · baseline {s ? money(s.baseline_equity) : "—"}
             </span>
           </div>
           <div style={{ height: 280 }}>
             {curve.length === 0 ? (
-              <div className="h-full flex items-center justify-center mono text-xs" style={{ color: "#5d7d99" }}>
+              <div className="h-full flex items-center justify-center mono text-xs" style={{ color: "#6E7075" }}>
                 No snapshots yet — the first summary read records one.
               </div>
             ) : (
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={curve} margin={{ top: 8, right: 12, bottom: 0, left: 0 }}>
-                  <CartesianGrid stroke="rgba(255,255,255,0.05)" vertical={false} />
+                  <CartesianGrid stroke="rgba(23,25,30,0.05)" vertical={false} />
                   <XAxis dataKey="captured_at" tickFormatter={chartLabel}
-                    tick={{ fill: "#5d7d99", fontSize: 9 }} axisLine={false} tickLine={false} minTickGap={32} />
+                    tick={{ fill: "#6E7075", fontSize: 9 }} axisLine={false} tickLine={false} minTickGap={32} />
                   <YAxis domain={yDomain} tickFormatter={(v: number) => `$${(v / 1000).toFixed(1)}k`}
-                    tick={{ fill: "#5d7d99", fontSize: 9 }} axisLine={false} tickLine={false} width={54} />
+                    tick={{ fill: "#6E7075", fontSize: 9 }} axisLine={false} tickLine={false} width={54} />
                   <Tooltip content={<ChartTooltip />} />
                   {s && (
-                    <ReferenceLine y={s.baseline_equity} stroke="rgba(245,166,35,0.45)" strokeDasharray="4 4" />
+                    <ReferenceLine y={s.baseline_equity} stroke="rgba(138,100,48,0.45)" strokeDasharray="4 4" />
                   )}
                   <Line type="monotone" dataKey="equity" stroke={GREEN} strokeWidth={2} dot={false}
                     activeDot={{ r: 4, fill: GREEN }} isAnimationActive={false} />
@@ -350,15 +336,15 @@ export default function OpsPage() {
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
           <section className="card px-4 py-4">
             <div className="flex items-center justify-between mb-3">
-              <span className="orb text-xs font-bold tracking-widest" style={{ color: "#e2f0ff" }}>OPEN POSITIONS</span>
-              <span className="mono text-[10px]" style={{ color: "#5d7d99" }}>{summary?.positions.length ?? 0}</span>
+              <span className="orb text-xs font-bold tracking-widest" style={{ color: "#17191E" }}>OPEN POSITIONS</span>
+              <span className="mono text-[10px]" style={{ color: "#6E7075" }}>{summary?.positions.length ?? 0}</span>
             </div>
             {!summary || summary.positions.length === 0 ? (
-              <div className="mono text-xs py-8 text-center" style={{ color: "#5d7d99" }}>Flat — no open positions.</div>
+              <div className="mono text-xs py-8 text-center" style={{ color: "#6E7075" }}>Flat — no open positions.</div>
             ) : (
               <table className="w-full mono text-[11px]">
                 <thead>
-                  <tr style={{ color: "#5d7d99" }}>
+                  <tr style={{ color: "#6E7075" }}>
                     <th className="text-left font-normal pb-2">TICKER</th>
                     <th className="text-right font-normal pb-2">QTY</th>
                     <th className="text-right font-normal pb-2">VALUE</th>
@@ -367,11 +353,11 @@ export default function OpsPage() {
                 </thead>
                 <tbody>
                   {summary.positions.map((p) => (
-                    <tr key={p.ticker} style={{ borderTop: "1px solid rgba(255,255,255,0.04)" }}>
+                    <tr key={p.ticker} style={{ borderTop: "1px solid rgba(23,25,30,0.04)" }}>
                       <td className="py-2" style={{ color: GREEN }}>{p.ticker}</td>
-                      <td className="py-2 text-right" style={{ color: "#c8e0f4" }}>{p.quantity.toLocaleString()}</td>
-                      <td className="py-2 text-right" style={{ color: "#c8e0f4" }}>{money(p.market_value)}</td>
-                      <td className="py-2 text-right" style={{ color: p.allocation_pct > 25 ? AMBER : "#c8e0f4" }}>
+                      <td className="py-2 text-right" style={{ color: "#3C3E44" }}>{p.quantity.toLocaleString()}</td>
+                      <td className="py-2 text-right" style={{ color: "#3C3E44" }}>{money(p.market_value)}</td>
+                      <td className="py-2 text-right" style={{ color: p.allocation_pct > 25 ? AMBER : "#3C3E44" }}>
                         {p.allocation_pct.toFixed(2)}%
                       </td>
                     </tr>
@@ -380,7 +366,7 @@ export default function OpsPage() {
               </table>
             )}
             {summary && (
-              <div className="mt-4 pt-3 grid grid-cols-4 gap-2" style={{ borderTop: "1px solid rgba(255,255,255,0.05)" }}>
+              <div className="mt-4 pt-3 grid grid-cols-4 gap-2" style={{ borderTop: "1px solid rgba(23,25,30,0.05)" }}>
                 {[
                   ["APPROVED", summary.ledger.approved, GREEN],
                   ["REJECTED", summary.ledger.rejected, AMBER],
@@ -388,7 +374,7 @@ export default function OpsPage() {
                   ["FAILED", summary.ledger.failed, RED],
                 ].map(([label, value, color]) => (
                   <div key={String(label)}>
-                    <div className="mono text-[9px]" style={{ color: "#5d7d99" }}>{label}</div>
+                    <div className="mono text-[9px]" style={{ color: "#6E7075" }}>{label}</div>
                     <div className="orb text-sm font-bold" style={{ color: String(color) }}>{String(value)}</div>
                   </div>
                 ))}
@@ -400,19 +386,19 @@ export default function OpsPage() {
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">
                 <XCircle size={14} style={{ color: AMBER }} />
-                <span className="orb text-xs font-bold tracking-widest" style={{ color: "#e2f0ff" }}>REJECTED ORDERS</span>
+                <span className="orb text-xs font-bold tracking-widest" style={{ color: "#17191E" }}>REJECTED ORDERS</span>
               </div>
-              <span className="mono text-[10px]" style={{ color: "#5d7d99" }}>latest {rejections.length}</span>
+              <span className="mono text-[10px]" style={{ color: "#6E7075" }}>latest {rejections.length}</span>
             </div>
             {rejections.length === 0 ? (
-              <div className="mono text-xs py-8 text-center" style={{ color: "#5d7d99" }}>
+              <div className="mono text-xs py-8 text-center" style={{ color: "#6E7075" }}>
                 No rejections recorded. Every blocked order appears here with its reason codes.
               </div>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full mono text-[11px]">
                   <thead>
-                    <tr style={{ color: "#5d7d99" }}>
+                    <tr style={{ color: "#6E7075" }}>
                       <th className="text-left font-normal pb-2">TIME</th>
                       <th className="text-left font-normal pb-2">ORDER</th>
                       <th className="text-right font-normal pb-2">NOTIONAL</th>
@@ -421,13 +407,13 @@ export default function OpsPage() {
                   </thead>
                   <tbody>
                     {rejections.map((r) => (
-                      <tr key={r.decision_id} style={{ borderTop: "1px solid rgba(255,255,255,0.04)" }}>
-                        <td className="py-2" style={{ color: "#5d7d99" }}>{clock(r.event_time)}</td>
-                        <td className="py-2" style={{ color: "#c8e0f4" }}>
+                      <tr key={r.decision_id} style={{ borderTop: "1px solid rgba(23,25,30,0.04)" }}>
+                        <td className="py-2" style={{ color: "#6E7075" }}>{clock(r.event_time)}</td>
+                        <td className="py-2" style={{ color: "#3C3E44" }}>
                           <span style={{ color: r.side === "BUY" ? GREEN : RED }}>{r.side}</span>{" "}
                           {r.ticker} × {r.quantity}
                         </td>
-                        <td className="py-2 text-right" style={{ color: "#c8e0f4" }}>{money(r.notional)}</td>
+                        <td className="py-2 text-right" style={{ color: "#3C3E44" }}>{money(r.notional)}</td>
                         <td className="py-2 pl-3">
                           <div className="flex flex-wrap gap-1">
                             {r.reason_codes.map((code) => (
@@ -452,7 +438,7 @@ export default function OpsPage() {
             <div className="mono text-[11px]" style={{ color: RED }}>
               KILL SWITCH ACTIVE — buys are blocked, sells remain allowed to flatten.
             </div>
-            <div className="mono text-[10px] mt-1" style={{ color: "#c8e0f4" }}>
+            <div className="mono text-[10px] mt-1" style={{ color: "#3C3E44" }}>
               {summary.kill_switch.reason || "no reason recorded"} · set by {summary.kill_switch.actor || "unknown"}
             </div>
           </div>

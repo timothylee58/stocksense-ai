@@ -13,22 +13,22 @@ import { BursaStock, MarketSnapshot, SectorSnapshot, BursaPrediction } from "@/t
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
 const SECTOR_COLORS: Record<string, string> = {
-  Financials:          "#0099ff",
-  Utilities:           "#a78bfa",
-  Materials:           "#f5a623",
-  Communication:       "#00ffcc",
-  "Consumer Defensive": "#ff6b35",
-  "Consumer Cyclical":  "#fbbf24",
-  Healthcare:          "#34d399",
-  Energy:              "#fb923c",
-  Industrials:         "#94a3b8",
-  Technology:          "#60a5fa",
+  Financials:          "#4251A8",
+  Utilities:           "#6B5CA5",
+  Materials:           "#8A6430",
+  Communication:       "#1F5E46",
+  "Consumer Defensive": "#A33A31",
+  "Consumer Cyclical":  "#8A6430",
+  Healthcare:          "#1F5E46",
+  Energy:              "#8A6430",
+  Industrials:         "#6E7075",
+  Technology:          "#4251A8",
 };
 
 function changeColor(pct: number) {
-  if (pct > 0) return "#00ffcc";
-  if (pct < 0) return "#ff4560";
-  return "#f5a623";
+  if (pct > 0) return "#1F5E46";
+  if (pct < 0) return "#A33A31";
+  return "#8A6430";
 }
 function fmtPct(v: number) { return (v >= 0 ? "+" : "") + v.toFixed(2) + "%"; }
 function fmtRM(v: number) { return v > 0 ? `RM ${v.toFixed(3)}` : "—"; }
@@ -51,7 +51,7 @@ function MYTClock() {
     return () => clearInterval(id);
   }, []);
   return (
-    <span style={{ fontFamily: "Share Tech Mono, monospace", fontSize: 11, color: "#00ffcc" }}>
+    <span style={{ fontFamily: "'Space Mono', monospace", fontSize: 11, color: "#1F5E46" }}>
       MYT {time}
     </span>
   );
@@ -62,7 +62,7 @@ function Skel({ className }: { className?: string }) {
   return (
     <motion.div
       className={`rounded ${className ?? ""}`}
-      style={{ background: "rgba(255,255,255,0.05)" }}
+      style={{ background: "rgba(23,25,30,0.05)" }}
       animate={{ opacity: [0.4, 0.8, 0.4] }}
       transition={{ duration: 1.5, repeat: Infinity, repeatType: "mirror", ease: "easeInOut" }}
     />
@@ -81,24 +81,24 @@ function MoverChip({
       whileTap={{ scale: 0.97 }}
       className="flex flex-col gap-0.5 px-3 py-2 rounded-lg shrink-0 text-left"
       style={{
-        background: isActive ? `${col}10` : "rgba(0,12,28,0.8)",
+        background: isActive ? `${col}10` : "#FBFAF6",
         border: `1px solid ${isActive ? col : col + "30"}`,
         minWidth: 110,
         outline: isActive ? `1px solid ${col}50` : "none",
       }}
     >
       <div className="flex items-center justify-between gap-1">
-        <span style={{ fontFamily: "Orbitron, monospace", fontSize: 10, color: col, fontWeight: 800 }}>
+        <span style={{ fontFamily: "'Iowan Old Style', Georgia, serif", fontSize: 10, color: col, fontWeight: 800 }}>
           {stock.ticker}
         </span>
         {stock.change_pct >= 0
           ? <TrendingUp size={9} style={{ color: col }} />
           : <TrendingDown size={9} style={{ color: col }} />}
       </div>
-      <span style={{ fontFamily: "Share Tech Mono, monospace", fontSize: 11, color: "#c8e0f4" }}>
+      <span style={{ fontFamily: "'Space Mono', monospace", fontSize: 11, color: "#3C3E44" }}>
         {fmtRM(stock.last_price)}
       </span>
-      <span style={{ fontFamily: "Share Tech Mono, monospace", fontSize: 9, color: col }}>
+      <span style={{ fontFamily: "'Space Mono', monospace", fontSize: 9, color: col }}>
         {fmtPct(stock.change_pct)}
       </span>
     </motion.button>
@@ -109,7 +109,7 @@ function MoverChip({
 function SectorCell({
   data, active, onClick,
 }: { data: SectorSnapshot; active: boolean; onClick: () => void }) {
-  const col = data.color ?? SECTOR_COLORS[data.sector] ?? "#4a7090";
+  const col = data.color ?? SECTOR_COLORS[data.sector] ?? "#6E7075";
   const changeCol = changeColor(data.avg_change);
   return (
     <motion.button
@@ -122,13 +122,13 @@ function SectorCell({
         border: `1px solid ${active ? col + "60" : col + "20"}`,
       }}
     >
-      <span style={{ fontFamily: "Share Tech Mono, monospace", fontSize: 8, color: col, letterSpacing: "0.12em" }}>
+      <span style={{ fontFamily: "'Space Mono', monospace", fontSize: 8, color: col, letterSpacing: "0.12em" }}>
         {data.sector.toUpperCase()}
       </span>
-      <span style={{ fontFamily: "Orbitron, monospace", fontSize: 14, color: changeCol, fontWeight: 700 }}>
+      <span style={{ fontFamily: "'Iowan Old Style', Georgia, serif", fontSize: 14, color: changeCol, fontWeight: 700 }}>
         {fmtPct(data.avg_change)}
       </span>
-      <span style={{ fontFamily: "Share Tech Mono, monospace", fontSize: 9, color: "#2a5070" }}>
+      <span style={{ fontFamily: "'Space Mono', monospace", fontSize: 9, color: "#9C978D" }}>
         {data.count} stock{data.count !== 1 ? "s" : ""}
       </span>
     </motion.button>
@@ -140,49 +140,49 @@ function ScreenerRow({
   stock, active, onClick,
 }: { stock: BursaStock; active: boolean; onClick: () => void }) {
   const col = changeColor(stock.change_pct);
-  const sCol = SECTOR_COLORS[stock.sector] ?? "#4a7090";
+  const sCol = SECTOR_COLORS[stock.sector] ?? "#6E7075";
   return (
     <motion.tr
       onClick={onClick}
-      whileHover={{ backgroundColor: "rgba(0,153,255,0.04)" }}
+      whileHover={{ backgroundColor: "rgba(66,81,168,0.04)" }}
       className="cursor-pointer"
       style={{
-        borderBottom: "1px solid rgba(255,255,255,0.03)",
-        background: active ? "rgba(0,255,200,0.04)" : "transparent",
+        borderBottom: "1px solid rgba(23,25,30,0.03)",
+        background: active ? "rgba(31,94,70,0.04)" : "transparent",
       }}
     >
       <td className="py-2.5 px-3">
         <div className="flex items-center gap-2">
-          {active && <div className="w-1 h-4 rounded-full" style={{ background: "#00ffcc" }} />}
-          <span style={{ fontFamily: "Orbitron, monospace", fontSize: 10, color: col, fontWeight: 800 }}>
+          {active && <div className="w-1 h-4 rounded-full" style={{ background: "#1F5E46" }} />}
+          <span style={{ fontFamily: "'Iowan Old Style', Georgia, serif", fontSize: 10, color: col, fontWeight: 800 }}>
             {stock.ticker}
           </span>
         </div>
       </td>
       <td className="py-2.5 px-3">
-        <span style={{ fontFamily: "Share Tech Mono, monospace", fontSize: 10, color: "#c8e0f4" }}>
+        <span style={{ fontFamily: "'Space Mono', monospace", fontSize: 10, color: "#3C3E44" }}>
           {stock.name}
         </span>
       </td>
       <td className="py-2.5 px-3">
         <span className="px-1.5 py-0.5 rounded"
-          style={{ fontSize: 8, fontFamily: "Share Tech Mono, monospace", background: `${sCol}12`, color: sCol, border: `1px solid ${sCol}25` }}>
+          style={{ fontSize: 8, fontFamily: "'Space Mono', monospace", background: `${sCol}12`, color: sCol, border: `1px solid ${sCol}25` }}>
           {stock.sector}
         </span>
       </td>
       <td className="py-2.5 px-3 text-right">
-        <span style={{ fontFamily: "Share Tech Mono, monospace", fontSize: 11, color: "#c8e0f4" }}>
+        <span style={{ fontFamily: "'Space Mono', monospace", fontSize: 11, color: "#3C3E44" }}>
           {stock.last_price > 0 ? stock.last_price.toFixed(3) : "—"}
         </span>
       </td>
       <td className="py-2.5 px-3 text-right">
-        <span className="flex items-center justify-end gap-1" style={{ color: col, fontSize: 11, fontFamily: "Share Tech Mono, monospace" }}>
+        <span className="flex items-center justify-end gap-1" style={{ color: col, fontSize: 11, fontFamily: "'Space Mono', monospace" }}>
           {stock.change_pct > 0 ? <TrendingUp size={10} /> : stock.change_pct < 0 ? <TrendingDown size={10} /> : <Minus size={10} />}
           {fmtPct(stock.change_pct)}
         </span>
       </td>
       <td className="py-2.5 px-3 text-right">
-        <span style={{ fontFamily: "Share Tech Mono, monospace", fontSize: 10, color: "#6a90b0" }}>
+        <span style={{ fontFamily: "'Space Mono', monospace", fontSize: 10, color: "#6E7075" }}>
           {fmtVol(stock.volume)}
         </span>
       </td>
@@ -208,9 +208,9 @@ function QuoteDetail({ quote }: { quote: BursaStock }) {
       initial={{ opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
       className="p-4 rounded-lg"
-      style={{ background: "rgba(0,12,28,0.8)", border: "1px solid rgba(0,153,255,0.1)" }}
+      style={{ background: "#FBFAF6", border: "1px solid rgba(23,25,30,0.08)" }}
     >
-      <div className="mono mb-3" style={{ fontSize: 9, color: "rgba(0,255,200,0.4)", letterSpacing: "0.2em" }}>
+      <div className="mono mb-3" style={{ fontSize: 9, color: "rgba(31,94,70,0.4)", letterSpacing: "0.2em" }}>
         // LIVE QUOTE
       </div>
       <div className="flex items-end gap-3 mb-4">
@@ -221,7 +221,7 @@ function QuoteDetail({ quote }: { quote: BursaStock }) {
           {fmtPct(quote.change_pct)}
         </span>
         {quote.source === "yfinance_kl" && (
-          <span className="mb-1 px-1.5 py-0.5 rounded mono" style={{ fontSize: 8, background: "rgba(245,166,35,0.1)", color: "#f5a623", border: "1px solid rgba(245,166,35,0.2)" }}>
+          <span className="mb-1 px-1.5 py-0.5 rounded mono" style={{ fontSize: 8, background: "rgba(138,100,48,0.1)", color: "#8A6430", border: "1px solid rgba(138,100,48,0.2)" }}>
             DELAYED
           </span>
         )}
@@ -229,9 +229,9 @@ function QuoteDetail({ quote }: { quote: BursaStock }) {
       <div className="grid grid-cols-2 gap-1.5">
         {rows.map(([label, value]) => (
           <div key={label} className="flex justify-between items-center px-2 py-1.5 rounded"
-            style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.04)" }}>
-            <span style={{ fontFamily: "Share Tech Mono, monospace", fontSize: 8, color: "#2a5070", letterSpacing: "0.1em" }}>{label}</span>
-            <span style={{ fontFamily: "Share Tech Mono, monospace", fontSize: 10, color: "#c8e0f4" }}>{value}</span>
+            style={{ background: "rgba(23,25,30,0.02)", border: "1px solid rgba(23,25,30,0.04)" }}>
+            <span style={{ fontFamily: "'Space Mono', monospace", fontSize: 8, color: "#9C978D", letterSpacing: "0.1em" }}>{label}</span>
+            <span style={{ fontFamily: "'Space Mono', monospace", fontSize: 10, color: "#3C3E44" }}>{value}</span>
           </div>
         ))}
       </div>
@@ -241,21 +241,21 @@ function QuoteDetail({ quote }: { quote: BursaStock }) {
 
 // ── ML Prediction card ──────────────────────────────────────────────────────
 function PredictionCard({ pred }: { pred: BursaPrediction }) {
-  const col = pred.direction === "UP" ? "#00ffcc" : pred.direction === "DOWN" ? "#ff4560" : "#f5a623";
+  const col = pred.direction === "UP" ? "#1F5E46" : pred.direction === "DOWN" ? "#A33A31" : "#8A6430";
   const indicators = [
-    { label: "RSI", value: pred.rsi != null ? pred.rsi.toFixed(1) : "—", color: (pred.rsi ?? 50) < 30 ? "#00ffcc" : (pred.rsi ?? 50) > 70 ? "#ff4560" : "#f5a623" },
-    { label: "MACD", value: pred.macd != null ? ((pred.macd >= 0 ? "+" : "") + pred.macd.toFixed(3)) : "—", color: (pred.macd ?? 0) >= 0 ? "#00ffcc" : "#ff4560" },
+    { label: "RSI", value: pred.rsi != null ? pred.rsi.toFixed(1) : "—", color: (pred.rsi ?? 50) < 30 ? "#1F5E46" : (pred.rsi ?? 50) > 70 ? "#A33A31" : "#8A6430" },
+    { label: "MACD", value: pred.macd != null ? ((pred.macd >= 0 ? "+" : "") + pred.macd.toFixed(3)) : "—", color: (pred.macd ?? 0) >= 0 ? "#1F5E46" : "#A33A31" },
     { label: "MOM 5D", value: pred.momentum_5d != null ? fmtPct(pred.momentum_5d) : "—", color: changeColor(pred.momentum_5d ?? 0) },
-    { label: "VOL ×", value: pred.vol_ratio != null ? `${pred.vol_ratio.toFixed(1)}×` : "—", color: (pred.vol_ratio ?? 1) > 1.5 ? "#00ffcc" : "#6a90b0" },
+    { label: "VOL ×", value: pred.vol_ratio != null ? `${pred.vol_ratio.toFixed(1)}×` : "—", color: (pred.vol_ratio ?? 1) > 1.5 ? "#1F5E46" : "#6E7075" },
   ];
   return (
     <motion.div
       initial={{ opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
       className="p-4 rounded-lg space-y-4"
-      style={{ background: "rgba(0,12,28,0.8)", border: "1px solid rgba(0,153,255,0.1)" }}
+      style={{ background: "#FBFAF6", border: "1px solid rgba(23,25,30,0.08)" }}
     >
-      <div className="mono" style={{ fontSize: 9, color: "rgba(0,255,200,0.4)", letterSpacing: "0.2em" }}>
+      <div className="mono" style={{ fontSize: 9, color: "rgba(31,94,70,0.4)", letterSpacing: "0.2em" }}>
         // ML PREDICTION
       </div>
       {/* Direction + Confidence */}
@@ -270,8 +270,8 @@ function PredictionCard({ pred }: { pred: BursaPrediction }) {
           </span>
         </div>
         <div className="flex-1 space-y-2">
-          <div className="mono" style={{ fontSize: 8, color: "#2a5070", letterSpacing: "0.15em" }}>CONFIDENCE</div>
-          <div className="h-1.5 rounded-full overflow-hidden" style={{ background: "rgba(255,255,255,0.06)" }}>
+          <div className="mono" style={{ fontSize: 8, color: "#9C978D", letterSpacing: "0.15em" }}>CONFIDENCE</div>
+          <div className="h-1.5 rounded-full overflow-hidden" style={{ background: "rgba(23,25,30,0.06)" }}>
             <motion.div
               initial={{ width: 0 }}
               animate={{ width: `${pred.confidence * 100}%` }}
@@ -289,8 +289,8 @@ function PredictionCard({ pred }: { pred: BursaPrediction }) {
       <div className="grid grid-cols-2 gap-1.5">
         {indicators.map(({ label, value, color }) => (
           <div key={label} className="text-center p-2 rounded"
-            style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.05)" }}>
-            <div className="mono" style={{ fontSize: 8, color: "#2a5070", letterSpacing: "0.1em" }}>{label}</div>
+            style={{ background: "rgba(23,25,30,0.03)", border: "1px solid rgba(23,25,30,0.05)" }}>
+            <div className="mono" style={{ fontSize: 8, color: "#9C978D", letterSpacing: "0.1em" }}>{label}</div>
             <div className="orb font-bold" style={{ fontSize: 11, color, marginTop: 2 }}>{value}</div>
           </div>
         ))}
@@ -298,10 +298,10 @@ function PredictionCard({ pred }: { pred: BursaPrediction }) {
       {/* Signal bullets */}
       {pred.signals.length > 0 && (
         <div>
-          <div className="mono mb-2" style={{ fontSize: 8, color: "#2a5070", letterSpacing: "0.15em" }}>SIGNALS</div>
+          <div className="mono mb-2" style={{ fontSize: 8, color: "#9C978D", letterSpacing: "0.15em" }}>SIGNALS</div>
           <ul className="space-y-1.5">
             {pred.signals.map((s, i) => (
-              <li key={i} className="flex gap-2 items-start mono" style={{ fontSize: 9, color: "#6a90b0", lineHeight: 1.5 }}>
+              <li key={i} className="flex gap-2 items-start mono" style={{ fontSize: 9, color: "#6E7075", lineHeight: 1.5 }}>
                 <ChevronRight size={9} className="mt-0.5 shrink-0" style={{ color: col }} />
                 {s}
               </li>
@@ -310,7 +310,7 @@ function PredictionCard({ pred }: { pred: BursaPrediction }) {
         </div>
       )}
       {pred.error && (
-        <p className="mono" style={{ fontSize: 9, color: "#ff6070" }}>{pred.error}</p>
+        <p className="mono" style={{ fontSize: 9, color: "#A33A31" }}>{pred.error}</p>
       )}
     </motion.div>
   );
@@ -392,23 +392,23 @@ export default function BursaSensPage() {
   const movers = market ? [...market.gainers, ...market.losers] : [];
 
   return (
-    <div className="min-h-screen mono" style={{ background: "#030d1a" }}>
+    <div className="min-h-screen mono" style={{ background: "#F6F4EF" }}>
 
       {/* ── Nav ───────────────────────────────────────────────────────────── */}
       <nav className="sticky top-0 z-40 flex items-center justify-between px-6 py-3"
-        style={{ background: "rgba(3,13,26,0.95)", borderBottom: "1px solid rgba(245,166,35,0.12)", backdropFilter: "blur(14px)" }}>
+        style={{ background: "rgba(246,244,239,0.95)", borderBottom: "1px solid rgba(138,100,48,0.12)", backdropFilter: "blur(14px)" }}>
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-2">
-            <div className="w-2 h-2 rounded-full" style={{ background: "#f5a623", boxShadow: "0 0 10px #f5a623" }} />
-            <span className="orb font-black text-sm tracking-widest" style={{ color: "#f5a623" }}>BURSA</span>
-            <span className="orb font-black text-sm tracking-widest" style={{ color: "#00ffcc" }}>&amp;SENS</span>
+            <div className="w-2 h-2 rounded-full" style={{ background: "#8A6430", boxShadow: "0 0 10px #8A6430" }} />
+            <span className="orb font-black text-sm tracking-widest" style={{ color: "#8A6430" }}>Bursa</span>
+            <span className="orb font-black text-sm tracking-widest" style={{ color: "#1F5E46" }}>&amp; Sens</span>
           </div>
           <span className="mono px-2 py-0.5 rounded"
-            style={{ fontSize: 9, background: "rgba(245,166,35,0.08)", border: "1px solid rgba(245,166,35,0.2)", color: "#f5a623", letterSpacing: "0.15em" }}>
+            style={{ fontSize: 9, background: "rgba(138,100,48,0.08)", border: "1px solid rgba(138,100,48,0.2)", color: "#8A6430", letterSpacing: "0.15em" }}>
             KLSE · BURSA MALAYSIA
           </span>
           {market && (
-            <span className="mono" style={{ fontSize: 10, color: "#2a5070" }}>
+            <span className="mono" style={{ fontSize: 10, color: "#9C978D" }}>
               {market.active}/{market.total} tracked
             </span>
           )}
@@ -417,14 +417,14 @@ export default function BursaSensPage() {
           <MYTClock />
           <button onClick={fetchMarket} disabled={loadingMkt}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded transition-opacity"
-            style={{ background: "rgba(245,166,35,0.06)", border: "1px solid rgba(245,166,35,0.25)", color: "#f5a623", fontSize: 9, opacity: loadingMkt ? 0.5 : 1 }}>
+            style={{ background: "rgba(138,100,48,0.06)", border: "1px solid rgba(138,100,48,0.25)", color: "#8A6430", fontSize: 9, opacity: loadingMkt ? 0.5 : 1 }}>
             <RefreshCw size={9} className={loadingMkt ? "animate-spin" : ""} />
-            REFRESH
+            Refresh
           </button>
           <Link href="/dashboard"
             className="mono px-3 py-1.5 rounded"
-            style={{ background: "rgba(0,153,255,0.06)", border: "1px solid rgba(0,153,255,0.2)", color: "#0099ff", fontSize: 9 }}>
-            ← STOCKSENSE
+            style={{ background: "rgba(66,81,168,0.06)", border: "1px solid rgba(23,25,30,0.12)", color: "#4251A8", fontSize: 9 }}>
+            ← StockSense
           </Link>
         </div>
       </nav>
@@ -435,11 +435,11 @@ export default function BursaSensPage() {
         {error && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}
             className="flex items-center gap-3 p-4 rounded-lg"
-            style={{ background: "rgba(255,69,96,0.06)", border: "1px solid rgba(255,69,96,0.2)" }}>
-            <AlertTriangle size={14} style={{ color: "#ff4560" }} />
-            <span className="mono" style={{ fontSize: 10, color: "#ff8094" }}>{error}</span>
+            style={{ background: "rgba(163,58,49,0.06)", border: "1px solid rgba(163,58,49,0.2)" }}>
+            <AlertTriangle size={14} style={{ color: "#A33A31" }} />
+            <span className="mono" style={{ fontSize: 10, color: "#A33A31" }}>{error}</span>
             <button onClick={fetchMarket} className="mono ml-auto px-2 py-1 rounded"
-              style={{ fontSize: 9, border: "1px solid rgba(255,69,96,0.3)", color: "#ff4560" }}>
+              style={{ fontSize: 9, border: "1px solid rgba(163,58,49,0.3)", color: "#A33A31" }}>
               RETRY
             </button>
           </motion.div>
@@ -448,15 +448,15 @@ export default function BursaSensPage() {
         {/* ── Movers strip ──────────────────────────────────────────────── */}
         <div>
           <div className="flex items-center gap-2 mb-2">
-            <Zap size={10} style={{ color: "#f5a623" }} />
-            <span className="mono" style={{ fontSize: 9, color: "#2a5070", letterSpacing: "0.15em" }}>
+            <Zap size={10} style={{ color: "#8A6430" }} />
+            <span className="mono" style={{ fontSize: 9, color: "#9C978D", letterSpacing: "0.15em" }}>
               // TOP MOVERS
             </span>
           </div>
           <div className="flex gap-2 overflow-x-auto pb-1">
             {loadingMkt
               ? Array.from({ length: 10 }).map((_, i) => (
-                  <div key={i} className="shrink-0 rounded-lg" style={{ width: 110, height: 70, background: "rgba(255,255,255,0.05)" }}>
+                  <div key={i} className="shrink-0 rounded-lg" style={{ width: 110, height: 70, background: "rgba(23,25,30,0.05)" }}>
                     <Skel className="w-full h-full" />
                   </div>
                 ))
@@ -476,20 +476,20 @@ export default function BursaSensPage() {
             {/* Controls */}
             <div className="card p-4 flex flex-wrap items-center gap-3">
               <div className="flex items-center gap-2">
-                <Filter size={10} style={{ color: "#0099ff" }} />
-                <span className="mono" style={{ fontSize: 9, color: "#2a5070", letterSpacing: "0.15em" }}>SCREENER</span>
+                <Filter size={10} style={{ color: "#4251A8" }} />
+                <span className="mono" style={{ fontSize: 9, color: "#9C978D", letterSpacing: "0.15em" }}>SCREENER</span>
               </div>
 
               <select value={sectorFilter} onChange={e => setSectorFilter(e.target.value)}
                 className="px-2 py-1 rounded"
-                style={{ background: "rgba(0,12,28,0.9)", border: "1px solid rgba(0,153,255,0.2)", color: "#c8e0f4", fontSize: 10, fontFamily: "Share Tech Mono, monospace" }}>
+                style={{ background: "#FBFAF6", border: "1px solid rgba(23,25,30,0.12)", color: "#3C3E44", fontSize: 10, fontFamily: "'Space Mono', monospace" }}>
                 <option value="">All Sectors</option>
                 {sectors.map(s => <option key={s} value={s}>{s}</option>)}
               </select>
 
               <select value={sortBy} onChange={e => setSortBy(e.target.value as typeof sortBy)}
                 className="px-2 py-1 rounded"
-                style={{ background: "rgba(0,12,28,0.9)", border: "1px solid rgba(0,153,255,0.2)", color: "#c8e0f4", fontSize: 10, fontFamily: "Share Tech Mono, monospace" }}>
+                style={{ background: "#FBFAF6", border: "1px solid rgba(23,25,30,0.12)", color: "#3C3E44", fontSize: 10, fontFamily: "'Space Mono', monospace" }}>
                 <option value="change_pct">Sort: Change %</option>
                 <option value="volume">Sort: Volume</option>
                 <option value="last_price">Sort: Price</option>
@@ -498,12 +498,12 @@ export default function BursaSensPage() {
               {sectorFilter && (
                 <button onClick={() => setSectorFilter("")}
                   className="mono px-2 py-1 rounded"
-                  style={{ fontSize: 9, color: "#f5a623", border: "1px solid rgba(245,166,35,0.3)" }}>
+                  style={{ fontSize: 9, color: "#8A6430", border: "1px solid rgba(138,100,48,0.3)" }}>
                   ✕ {sectorFilter}
                 </button>
               )}
 
-              <span className="mono ml-auto" style={{ fontSize: 9, color: "#2a5070" }}>
+              <span className="mono ml-auto" style={{ fontSize: 9, color: "#9C978D" }}>
                 {screened.length} stocks
               </span>
             </div>
@@ -516,7 +516,7 @@ export default function BursaSensPage() {
                 </div>
               ) : screened.length === 0 ? (
                 <div className="flex flex-col items-center py-10 gap-3"
-                  style={{ color: "#2a5070" }}>
+                  style={{ color: "#9C978D" }}>
                   <Filter size={20} />
                   <span className="mono" style={{ fontSize: 11 }}>No stocks match filters</span>
                 </div>
@@ -526,7 +526,7 @@ export default function BursaSensPage() {
                     <tr>
                       {["CODE", "COMPANY", "SECTOR", "PRICE (RM)", "CHANGE", "VOLUME"].map(h => (
                         <th key={h} className={`text-left pb-3 px-3 ${h === "PRICE (RM)" || h === "CHANGE" || h === "VOLUME" ? "text-right" : ""}`}
-                          style={{ fontSize: 8, fontFamily: "Share Tech Mono, monospace", color: "#2a5070", letterSpacing: "0.15em", borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
+                          style={{ fontSize: 8, fontFamily: "'Space Mono', monospace", color: "#9C978D", letterSpacing: "0.15em", borderBottom: "1px solid rgba(23,25,30,0.05)" }}>
                           {h}
                         </th>
                       ))}
@@ -547,8 +547,8 @@ export default function BursaSensPage() {
             {/* Sector heatmap */}
             <div className="card p-4">
               <div className="flex items-center gap-2 mb-3">
-                <Activity size={10} style={{ color: "#00ffcc" }} />
-                <span className="mono" style={{ fontSize: 9, color: "rgba(0,255,200,0.4)", letterSpacing: "0.2em" }}>
+                <Activity size={10} style={{ color: "#1F5E46" }} />
+                <span className="mono" style={{ fontSize: 9, color: "rgba(31,94,70,0.4)", letterSpacing: "0.2em" }}>
                   // SECTOR HEATMAP
                 </span>
               </div>
@@ -578,19 +578,19 @@ export default function BursaSensPage() {
                   {/* Header */}
                   <div className="card p-3 flex items-center justify-between">
                     <div>
-                      <div className="mono mb-0.5" style={{ fontSize: 8, color: "#2a5070" }}>SELECTED</div>
+                      <div className="mono mb-0.5" style={{ fontSize: 8, color: "#9C978D" }}>SELECTED</div>
                       <div className="flex items-center gap-2">
-                        <span className="orb font-black" style={{ fontSize: 15, color: "#f5a623" }}>
+                        <span className="orb font-black" style={{ fontSize: 15, color: "#8A6430" }}>
                           {activeCode.split(".")[1]}
                         </span>
-                        <span className="mono" style={{ fontSize: 9, color: "#6a90b0" }}>
+                        <span className="mono" style={{ fontSize: 9, color: "#6E7075" }}>
                           {liveQuote?.name ?? ""}
                         </span>
                       </div>
                     </div>
                     <div className="flex items-center gap-1.5">
-                      <div className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: "#00ffcc" }} />
-                      <span className="mono" style={{ fontSize: 8, color: "#00ffcc" }}>LIVE</span>
+                      <div className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: "#1F5E46" }} />
+                      <span className="mono" style={{ fontSize: 8, color: "#1F5E46" }}>LIVE</span>
                     </div>
                   </div>
 
@@ -622,12 +622,12 @@ export default function BursaSensPage() {
               ) : !loadingMkt ? (
                 <motion.div key="empty" initial={{ opacity: 0 }} animate={{ opacity: 1 }}
                   className="card p-8 flex flex-col items-center gap-4 text-center">
-                  <BarChart3 size={28} style={{ color: "#1a3550" }} />
+                  <BarChart3 size={28} style={{ color: "#D8D3C8" }} />
                   <div>
-                    <p className="orb font-bold mb-1" style={{ fontSize: 11, color: "#2a5070" }}>
+                    <p className="orb font-bold mb-1" style={{ fontSize: 11, color: "#9C978D" }}>
                       SELECT A STOCK
                     </p>
-                    <p className="mono" style={{ fontSize: 9, color: "#1a3550" }}>
+                    <p className="mono" style={{ fontSize: 9, color: "#D8D3C8" }}>
                       Click a row or mover chip to see live quote and ML direction prediction.
                     </p>
                   </div>
@@ -639,12 +639,12 @@ export default function BursaSensPage() {
 
         {/* ── Footer ────────────────────────────────────────────────────── */}
         <div className="flex items-center justify-between pt-2 pb-4"
-          style={{ borderTop: "1px solid rgba(0,153,255,0.06)" }}>
-          <span className="mono" style={{ fontSize: 9, color: "#1a3550" }}>
+          style={{ borderTop: "1px solid rgba(66,81,168,0.06)" }}>
+          <span className="mono" style={{ fontSize: 9, color: "#D8D3C8" }}>
             Bursa&amp;Sens · Powered by moomoo OpenAPI + FinBERT · Data may be delayed
           </span>
           {market && (
-            <span className="mono" style={{ fontSize: 9, color: "#1a3550" }}>
+            <span className="mono" style={{ fontSize: 9, color: "#D8D3C8" }}>
               Last updated {new Date(market.timestamp).toLocaleTimeString("en-MY", { timeZone: "Asia/Kuala_Lumpur" })} MYT
             </span>
           )}
