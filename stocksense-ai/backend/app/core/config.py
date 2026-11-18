@@ -85,7 +85,11 @@ class Settings(BaseSettings):
     default_tickers: list[str] = ["NVDA", "MAYBANK.KL", "PBBANK.KL"]
 
     # CORS (restrict in production)
-    allowed_origins: list[str] = ["http://localhost:3000", "https://main.your-app-id.amplifyapp.com"]
+    allowed_origins: list[str] = [
+        "http://localhost:3000",
+        "http://localhost:8081",  # Expo dev server / web
+        "https://main.your-app-id.amplifyapp.com",
+    ]
 
     class Config:
         env_file = ".env"
