@@ -457,6 +457,10 @@ export default function Dashboard() {
               style={{ fontSize: 9, color: "#f5a623", border: "1px solid rgba(245,166,35,0.3)", background: "rgba(245,166,35,0.06)" }}>
               <span style={{ color: "#f5a623" }}>⬡</span> BURSA&amp;SENS
             </Link>
+            <Link href="/dashboard/ops" className="mono px-2 py-1 rounded"
+              style={{ fontSize: 9, color: "#00ffcc", border: "1px solid rgba(0,255,200,0.25)" }}>
+              OPS
+            </Link>
           </div>
         </div>
         <div className="flex items-center gap-3">

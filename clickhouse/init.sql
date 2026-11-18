@@ -107,6 +107,24 @@ CREATE TABLE IF NOT EXISTS stocksense.decision_ledger (
 ) ENGINE = ReplacingMergeTree(ingested_at)
 ORDER BY (account_id, decision_id, event_type);
 
+-- Equity snapshots backing the ops dashboard's P&L / equity curve.
+-- Written on every /api/portfolio/summary read; one row per account poll.
+CREATE TABLE IF NOT EXISTS stocksense.portfolio_snapshots (
+    snapshot_id       String,
+    account_id        LowCardinality(String),
+    source            LowCardinality(String),
+    equity            Float64,
+    cash              Float64,
+    market_value      Float64,
+    day_pnl           Float64,
+    gross_exposure_pct Float64,
+    position_count    UInt16,
+    kill_switch_active UInt8,
+    captured_at       DateTime64(3, 'UTC'),
+    ingested_at       DateTime DEFAULT now()
+) ENGINE = ReplacingMergeTree(ingested_at)
+ORDER BY (account_id, captured_at, snapshot_id);
+
 -- ── Useful cross-ticker views ────────────────────────────────────────────────
 -- Rolling 30-day volatility (annualised) across all tickers.
 -- Usage: SELECT * FROM stocksense.vol_30d WHERE date = today() ORDER BY ann_vol DESC

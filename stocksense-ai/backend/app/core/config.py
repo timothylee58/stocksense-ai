@@ -36,8 +36,9 @@ class Settings(BaseSettings):
     risk_max_drawdown_pct: float = 0.15
     risk_min_cash_buffer_pct: float = 0.10
 
-    # Decision ledger
+    # Decision ledger + equity history
     decision_ledger_jsonl: str = "data/decision_ledger.jsonl"
+    portfolio_history_jsonl: str = "data/portfolio_history.jsonl"
     admin_api_token: str = ""
 
     # Auth
