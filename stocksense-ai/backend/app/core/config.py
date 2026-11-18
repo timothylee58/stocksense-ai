@@ -21,6 +21,25 @@ class Settings(BaseSettings):
     moomoo_port: int = 11111
     moomoo_enabled: bool = True
 
+    # Moomoo paper trading — SIMULATE only, never live
+    moomoo_trade_enabled: bool = False
+    moomoo_trd_env: str = "SIMULATE"
+    moomoo_paper_account_id: str = ""
+    moomoo_trd_market: str = "US"
+    moomoo_security_firm: str = "FUTUSECURITIES"
+
+    # Pre-trade risk limits
+    risk_max_position_pct: float = 0.25
+    risk_max_gross_exposure_pct: float = 0.90
+    risk_max_order_notional: float = 50_000.0
+    risk_max_daily_loss_pct: float = 0.03
+    risk_max_drawdown_pct: float = 0.15
+    risk_min_cash_buffer_pct: float = 0.10
+
+    # Decision ledger
+    decision_ledger_jsonl: str = "data/decision_ledger.jsonl"
+    admin_api_token: str = ""
+
     # Auth
     secret_key: str = "changeme-use-openssl-rand-hex-32"
     algorithm: str = "HS256"
