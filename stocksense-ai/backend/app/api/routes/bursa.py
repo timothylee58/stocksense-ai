@@ -25,7 +25,7 @@ from fastapi.responses import StreamingResponse
 from app.core.config import get_settings
 from app.core.demo_data import get_demo_prediction, get_demo_quote
 from app.core.redis_client import cache_get, cache_set
-from app.core.stocks import MY_YF_TICKERS, STOCK_UNIVERSE
+from app.core.stocks import MY_YF_TICKERS, STOCK_UNIVERSE, valid_price
 from app.data.moomoo_fetcher import fetch_realtime_quote
 from app.schemas.bursa import (
     BursaPredictionSchema,
@@ -88,9 +88,9 @@ async def _yf_quote_my(full_code: str) -> dict | None:
 
         last = data.iloc[-1]
         prev = data.iloc[-2] if len(data) >= 2 else last
-        last_price = _num(last.get("Close"))
-        prev_close = _num(prev.get("Close"), last_price)
-        if last_price <= 0:
+        last_price = valid_price(last.get("Close"))
+        prev_close = valid_price(prev.get("Close")) or last_price
+        if not last_price:
             return None
         return {
             "last_price":       last_price,
@@ -119,13 +119,13 @@ async def _fetch_quote(full_code: str) -> dict:
 
     try:
         q = await fetch_realtime_quote(ticker, market)
-        raw = q if q.get("last_price", 0) > 0 else (await _yf_quote_my(full_code)) or q
+        raw = q if valid_price(q.get("last_price")) else (await _yf_quote_my(full_code)) or q
     except Exception as exc:
         logger.warning("moomoo fetch failed for %s: %s", full_code, exc)
         raw = (await _yf_quote_my(full_code)) or {"last_price": 0.0, "source": "error"}
 
-    lp = _num(raw.get("last_price"))
-    pc = _num(raw.get("prev_close_price"))
+    lp = valid_price(raw.get("last_price"))
+    pc = valid_price(raw.get("prev_close_price"))
     change_pct = round(((lp - pc) / pc * 100) if pc else 0.0, 2)
     ticker_short = full_code.split(".")[-1]
 
