@@ -1,4 +1,5 @@
 import asyncio
+import json
 import pathlib
 from datetime import datetime, timezone
 
@@ -388,5 +389,4 @@ def test_orphaned_partial_pnl_is_not_carried_into_next_trade(tmp_path):
     asyncio.run(a.run_cycle())
     assert r.open_trade_pnl == {}
     assert any(e.get("action") == "orphaned_partial_pnl" for e in a.ledger.read())
-    import json
-    assert json.load(open(state))["open_trade_pnl"] == {}      # cleared state was persisted
+    assert json.loads(pathlib.Path(state).read_text())["open_trade_pnl"] == {}   # persisted clean
