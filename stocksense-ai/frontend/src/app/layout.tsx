@@ -1,21 +1,14 @@
 import type { Metadata } from "next";
 
-import { Space_Mono, Syne } from "next/font/google";
+import { Space_Mono } from "next/font/google";
 
 import "./globals.css";
 
-// Syne: geometric, technical — perfect for data dashboards
-// Space Mono: monospace for numbers — zero ambiguity on prices
-
-const syne = Syne({
-  subsets: ["latin"],
-  variable: "--font-syne",
-  weight: ["400", "500", "600", "700", "800"],
-});
+// Space Mono keeps financial figures unambiguous; display type is a serif system stack.
 
 const spaceMono = Space_Mono({
   subsets: ["latin"],
-  variable: "--font-mono",
+  variable: "--font-space-mono",
   weight: ["400", "700"],
 });
 
@@ -30,7 +23,7 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`${syne.variable} ${spaceMono.variable}`}>
+    <html lang="en" className={spaceMono.variable}>
       <body>{children}</body>
     </html>
   );

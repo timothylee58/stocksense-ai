@@ -30,6 +30,7 @@ except ImportError:
     SubType = None
 
 from app.core.config import get_settings
+from app.core.stocks import get_security_code, valid_price
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -37,16 +38,16 @@ settings = get_settings()
 # Market code mapping for moomoo
 MARKET_CODES = {
     "US": "US.",      # US stocks: US.AAPL, US.NVDA
-    "MY": "MY.",      # Malaysia stocks: MY.MAYBANK, MY.TENAGA
+    "MY": "MY.",      # Malaysia stocks: MY.1155 (KLSE code)
     "HK": "HK.",      # Hong Kong stocks: HK.00700
-    "SG": "SG.",      # Singapore stocks: SG.D05
+    "SG": "SG.",      # Singapore stocks: SG.D05 (SGX code)
 }
 
 
 def get_moomoo_code(ticker: str, market: str = "US") -> str:
     """Convert ticker symbol to moomoo market code format."""
     prefix = MARKET_CODES.get(market.upper(), "US.")
-    return f"{prefix}{ticker}"
+    return f"{prefix}{get_security_code(ticker, market)}"
 
 
 class MoomooClient:
@@ -274,12 +275,16 @@ async def _fallback_yfinance_quote(ticker: str) -> dict:
             return {"ticker": ticker, "last_price": 0.0, "source": "yfinance_fallback"}
 
         last_row = data.iloc[-1]
+        last_price = valid_price(last_row.get("Close"))
+        if not last_price:
+            return {"ticker": ticker, "last_price": 0.0, "source": "yfinance_fallback"}
+
         return {
             "ticker": ticker,
-            "last_price": float(last_row.get("Close", 0)),
-            "open_price": float(last_row.get("Open", 0)),
-            "high_price": float(last_row.get("High", 0)),
-            "low_price": float(last_row.get("Low", 0)),
+            "last_price": last_price,
+            "open_price": valid_price(last_row.get("Open")),
+            "high_price": valid_price(last_row.get("High")),
+            "low_price": valid_price(last_row.get("Low")),
             "volume": float(last_row.get("Volume", 0)),
             "source": "yfinance_fallback",
             "update_time": datetime.now().isoformat(),

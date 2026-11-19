@@ -36,9 +36,9 @@ function sign(v: number) { return v >= 0 ? "+" : ""; }
 function MetricCell({ label, value, color }: { label: string; value: string; color?: string }) {
   return (
     <div className="flex flex-col items-center gap-0.5 px-3 py-2 rounded"
-      style={{ background: "rgba(0,153,255,0.04)", border: "1px solid rgba(0,153,255,0.06)" }}>
-      <span className="mono" style={{ fontSize: 9, color: "#2a5070", letterSpacing: "0.1em" }}>{label}</span>
-      <span className="mono font-bold" style={{ fontSize: 13, color: color ?? "#e2f0ff" }}>{value}</span>
+      style={{ background: "rgba(66,81,168,0.04)", border: "1px solid rgba(66,81,168,0.06)" }}>
+      <span className="mono" style={{ fontSize: 9, color: "#9C978D", letterSpacing: "0.1em" }}>{label}</span>
+      <span className="mono font-bold" style={{ fontSize: 13, color: color ?? "#17191E" }}>{value}</span>
     </div>
   );
 }
@@ -49,10 +49,10 @@ function EqTooltip({ active, payload, label }: any) {
   const strat = payload.find((p: any) => p.dataKey === "strategy");
   const bench = payload.find((p: any) => p.dataKey === "benchmark");
   return (
-    <div className="rounded px-3 py-2" style={{ background: "rgba(3,13,26,0.95)", border: "1px solid rgba(0,153,255,0.2)", fontSize: 11 }}>
-      <div className="mono" style={{ color: "#2a5070", marginBottom: 4 }}>{label}</div>
-      {strat && <div className="mono" style={{ color: "#00ffcc" }}>Strategy: {((strat.value - 1) * 100).toFixed(2)}%</div>}
-      {bench && <div className="mono" style={{ color: "#60a5fa" }}>Benchmark: {((bench.value - 1) * 100).toFixed(2)}%</div>}
+    <div className="rounded px-3 py-2" style={{ background: "rgba(246,244,239,0.95)", border: "1px solid rgba(66,81,168,0.2)", fontSize: 11 }}>
+      <div className="mono" style={{ color: "#9C978D", marginBottom: 4 }}>{label}</div>
+      {strat && <div className="mono" style={{ color: "#1F5E46" }}>Strategy: {((strat.value - 1) * 100).toFixed(2)}%</div>}
+      {bench && <div className="mono" style={{ color: "#4251A8" }}>Benchmark: {((bench.value - 1) * 100).toFixed(2)}%</div>}
     </div>
   );
 }
@@ -84,17 +84,17 @@ export default function BacktestPanel({ ticker }: { ticker: string }) {
   const retPct   = m ? sign(m.total_return) + pct(m.total_return) : "";
 
   return (
-    <div className="card p-5 mt-4" style={{ background: "rgba(0,12,28,0.8)", border: "1px solid rgba(0,153,255,0.1)", borderRadius: 12 }}>
+    <div className="card p-5 mt-4" style={{ background: "rgba(23,25,30,0.94)", border: "1px solid rgba(66,81,168,0.1)", borderRadius: 12 }}>
       {/* Header */}
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
-          <BarChart3 size={14} style={{ color: "#a78bfa" }} />
-          <span className="orb text-xs font-bold tracking-widest" style={{ color: "#a78bfa" }}>
+          <BarChart3 size={14} style={{ color: "#6B5CA5" }} />
+          <span className="orb text-xs font-bold tracking-widest" style={{ color: "#6B5CA5" }}>
             WALK-FORWARD BACKTEST
           </span>
           {data?.demo && <Badge variant="demo" dot>DEMO</Badge>}
           {data && (
-            <span className="mono" style={{ fontSize: 9, color: "#2a5070" }}>
+            <span className="mono" style={{ fontSize: 9, color: "#9C978D" }}>
               {data.test_period.start.slice(0, 10)} → {data.test_period.end.slice(0, 10)}
               &nbsp;({data.test_period.n_days}d)
             </span>
@@ -104,7 +104,7 @@ export default function BacktestPanel({ ticker }: { ticker: string }) {
           onClick={fetch_}
           disabled={loading}
           className="flex items-center gap-1 px-2 py-1 rounded"
-          style={{ fontSize: 10, color: "#2a5070", border: "1px solid rgba(0,153,255,0.1)", background: "transparent", cursor: "pointer" }}
+          style={{ fontSize: 10, color: "#9C978D", border: "1px solid rgba(66,81,168,0.1)", background: "transparent", cursor: "pointer" }}
         >
           <RefreshCw size={10} className={loading ? "animate-spin" : ""} />
           REFRESH
@@ -127,7 +127,7 @@ export default function BacktestPanel({ ticker }: { ticker: string }) {
 
       {/* Error */}
       {!loading && error && (
-        <div className="text-center py-4" style={{ color: "#ff4560", fontSize: 12 }}>
+        <div className="text-center py-4" style={{ color: "#A33A31", fontSize: 12 }}>
           {error.includes("422") ? "No trained model — run `make train` first." : error}
         </div>
       )}
@@ -140,22 +140,22 @@ export default function BacktestPanel({ ticker }: { ticker: string }) {
             <MetricCell
               label="TOTAL RETURN"
               value={retPct}
-              color={m.total_return >= 0 ? "#00ffcc" : "#ff4560"}
+              color={m.total_return >= 0 ? "#1F5E46" : "#A33A31"}
             />
             <MetricCell
               label="ALPHA vs B&H"
               value={alphaPct}
-              color={m.alpha >= 0 ? "#00ffcc" : "#ff4560"}
+              color={m.alpha >= 0 ? "#1F5E46" : "#A33A31"}
             />
             <MetricCell
               label="SHARPE"
               value={m.sharpe_ratio.toFixed(2)}
-              color={m.sharpe_ratio >= 1 ? "#00ffcc" : m.sharpe_ratio >= 0 ? "#f5a623" : "#ff4560"}
+              color={m.sharpe_ratio >= 1 ? "#1F5E46" : m.sharpe_ratio >= 0 ? "#8A6430" : "#A33A31"}
             />
             <MetricCell
               label="MAX DRAWDOWN"
               value={pct(m.max_drawdown)}
-              color={m.max_drawdown > -0.1 ? "#00ffcc" : m.max_drawdown > -0.2 ? "#f5a623" : "#ff4560"}
+              color={m.max_drawdown > -0.1 ? "#1F5E46" : m.max_drawdown > -0.2 ? "#8A6430" : "#A33A31"}
             />
             <MetricCell label="WIN RATE" value={pct(m.win_rate)} />
           </div>
@@ -169,7 +169,7 @@ export default function BacktestPanel({ ticker }: { ticker: string }) {
 
           {/* Equity curve */}
           <div style={{ marginTop: 12 }}>
-            <span className="mono" style={{ fontSize: 9, color: "#2a5070", letterSpacing: "0.1em" }}>
+            <span className="mono" style={{ fontSize: 9, color: "#9C978D", letterSpacing: "0.1em" }}>
               EQUITY CURVE — long-only strategy vs buy &amp; hold
             </span>
             <div style={{ height: 140, marginTop: 6 }}>
@@ -177,31 +177,31 @@ export default function BacktestPanel({ ticker }: { ticker: string }) {
                 <LineChart data={data.equity_curve} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
                   <XAxis
                     dataKey="date"
-                    tick={{ fontSize: 8, fill: "#2a5070" }}
+                    tick={{ fontSize: 8, fill: "#9C978D" }}
                     tickFormatter={(d) => d?.slice(5, 10) ?? ""}
                     interval="preserveStartEnd"
                     axisLine={false}
                     tickLine={false}
                   />
                   <YAxis
-                    tick={{ fontSize: 8, fill: "#2a5070" }}
+                    tick={{ fontSize: 8, fill: "#9C978D" }}
                     tickFormatter={(v) => `${((v - 1) * 100).toFixed(0)}%`}
                     axisLine={false}
                     tickLine={false}
                     domain={["auto", "auto"]}
                   />
                   <Tooltip content={<EqTooltip />} />
-                  <ReferenceLine y={1} stroke="rgba(255,255,255,0.08)" strokeDasharray="3 3" />
+                  <ReferenceLine y={1} stroke="rgba(23,25,30,0.08)" strokeDasharray="3 3" />
                   <Line
                     dataKey="strategy"
-                    stroke="#00ffcc"
+                    stroke="#1F5E46"
                     strokeWidth={1.5}
                     dot={false}
                     name="Strategy"
                   />
                   <Line
                     dataKey="benchmark"
-                    stroke="#60a5fa"
+                    stroke="#4251A8"
                     strokeWidth={1}
                     strokeDasharray="4 2"
                     dot={false}
@@ -210,13 +210,13 @@ export default function BacktestPanel({ ticker }: { ticker: string }) {
                 </LineChart>
               </ResponsiveContainer>
             </div>
-            <div className="flex items-center gap-4 mt-1" style={{ fontSize: 9, color: "#2a5070" }}>
+            <div className="flex items-center gap-4 mt-1" style={{ fontSize: 9, color: "#9C978D" }}>
               <span className="flex items-center gap-1">
-                <span style={{ width: 16, height: 2, background: "#00ffcc", display: "inline-block" }} />
+                <span style={{ width: 16, height: 2, background: "#1F5E46", display: "inline-block" }} />
                 Strategy
               </span>
               <span className="flex items-center gap-1">
-                <span style={{ width: 16, height: 2, background: "#60a5fa", display: "inline-block", borderTop: "2px dashed #60a5fa" }} />
+                <span style={{ width: 16, height: 2, background: "#4251A8", display: "inline-block", borderTop: "2px dashed #4251A8" }} />
                 Buy &amp; Hold
               </span>
             </div>

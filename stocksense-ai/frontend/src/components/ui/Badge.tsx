@@ -5,12 +5,12 @@ import React from "react";
 type BadgeVariant = "up" | "down" | "neutral" | "info" | "warning" | "demo";
 
 const VARIANT_STYLES: Record<BadgeVariant, { color: string; bg: string; border: string }> = {
-  up:      { color: "#00ffcc", bg: "rgba(0,255,204,0.10)", border: "rgba(0,255,204,0.25)" },
-  down:    { color: "#ff4560", bg: "rgba(255,69,96,0.10)",  border: "rgba(255,69,96,0.25)" },
-  neutral: { color: "#94a3b8", bg: "rgba(148,163,184,0.08)", border: "rgba(148,163,184,0.2)" },
-  info:    { color: "#60a5fa", bg: "rgba(96,165,250,0.10)", border: "rgba(96,165,250,0.25)" },
-  warning: { color: "#f5a623", bg: "rgba(245,166,35,0.10)", border: "rgba(245,166,35,0.25)" },
-  demo:    { color: "#a78bfa", bg: "rgba(167,139,250,0.10)", border: "rgba(167,139,250,0.25)" },
+  up:      { color: "#1F5E46", bg: "#E9F1EC", border: "#CFE0D5" },
+  down:    { color: "#A33A31", bg: "#F9EBE8", border: "#EBD2CD" },
+  neutral: { color: "#6E7075", bg: "#F6F4EF", border: "#E6E2D9" },
+  info:    { color: "#4251A8", bg: "#ECEEF9", border: "#DADDF2" },
+  warning: { color: "#8A6430", bg: "#F7EFE1", border: "#E7D9BE" },
+  demo:    { color: "#6B5CA5", bg: "#F0EDF7", border: "#DED8ED" },
 };
 
 interface BadgeProps {
@@ -33,17 +33,17 @@ export function Badge({ variant = "neutral", children, className = "", dot = fal
       style={{
         display: "inline-flex",
         alignItems: "center",
-        gap: 4,
-        padding: "2px 8px",
+        gap: 5,
+        padding: "3px 9px",
         borderRadius: 999,
-        fontSize: 10,
+        fontSize: 9,
         fontWeight: 600,
-        letterSpacing: "0.06em",
+        letterSpacing: "0.08em",
         textTransform: "uppercase",
         color: s.color,
         background: s.bg,
         border: `1px solid ${s.border}`,
-        fontFamily: "'Share Tech Mono', monospace",
+        fontFamily: "var(--font-mono), monospace",
         whiteSpace: "nowrap",
       }}
     >
@@ -54,7 +54,6 @@ export function Badge({ variant = "neutral", children, className = "", dot = fal
             height: 5,
             borderRadius: "50%",
             background: s.color,
-            boxShadow: `0 0 4px ${s.color}`,
             flexShrink: 0,
           }}
         />

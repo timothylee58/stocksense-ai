@@ -143,12 +143,57 @@ MOOMOO_PORT=11111
 MOOMOO_ENABLED=true
 ```
 
-### 3. Start moomoo OpenD
+### 3. Start moomoo OpenD (macOS, paper trading)
 
-1. Download moomoo OpenD from official website
-2. Install and launch the gateway client
-3. Log in with your moomoo account
-4. Verify OpenD is listening on port 11111
+OpenD is the local gateway the Python SDK talks to. It must stay running while the backend trades; the backend fails closed (`503 PAPER_ACCOUNT_ID_REQUIRED` / `BROKER_UNAVAILABLE`) when it is down.
+
+1. **Download** the macOS build from <https://www.moomoo.com/download/OpenAPI> (`opend-macos`).
+2. **Unzip** and either launch `OpenD.app` or run it from a terminal:
+   ```bash
+   ./OpenD.app/Contents/MacOS/OpenD
+   ```
+   > macOS gives the app a random working directory at launch. If it cannot find its config, pass it explicitly: `OpenD -cfg_file=/absolute/path/OpenD.xml` (the CLI tarball also ships `fixrun.sh` for this).
+3. **Log in** with your moomoo ID (or `+country-code` phone number) and password, plus the OTP if prompted. From v10.10 OpenD starts in interactive login mode.
+4. **Confirm the gateway is listening** (default `127.0.0.1:11111`):
+   ```bash
+   nc -z 127.0.0.1 11111 && echo "OpenD up"
+   lsof -nP -iTCP:11111 -sTCP:LISTEN
+   ```
+5. **Create the paper account once** if you have never used it: moomoo desktop app → left sidebar **Paper**, or mobile → **Me → Paper Trading**. All four platforms (app, desktop, web, API) share the same paper accounts.
+6. **Find the SIMULATE `acc_id`** with the repo's virtualenv:
+   ```bash
+   cd stocksense-ai/stocksense-ai/backend && .venv/bin/python - <<'PY'
+   import moomoo as sdk
+   from app.core.config import get_settings
+   s = get_settings()
+   ctx = sdk.OpenSecTradeContext(
+       filter_trdmarket=getattr(sdk.TrdMarket, s.moomoo_trd_market.upper()),
+       host=s.moomoo_host, port=s.moomoo_port,
+       security_firm=getattr(sdk.SecurityFirm, s.moomoo_security_firm.upper()),
+   )
+   ret, data = ctx.get_acc_list()
+   print(data[["acc_id", "trd_env", "acc_type", "sim_acc_type", "trdmarket_auth", "acc_status"]])
+   ctx.close()
+   PY
+   ```
+   Pick the row where `trd_env == SIMULATE`, `trdmarket_auth` contains `US`, `sim_acc_type` is `STOCK_AND_OPTION` (US margin paper account), and `acc_status` is `ACTIVE`. `sim_acc_type=OPTION` / `FUTURES` accounts cannot trade stocks; `FUTURES_SIMULATE_*` rows belong to `OpenFutureTradeContext`.
+7. **Configure the backend** `backend/.env`:
+   ```env
+   DEMO_MODE=false
+   MOOMOO_ENABLED=true
+   MOOMOO_TRADE_ENABLED=true
+   MOOMOO_TRD_ENV=SIMULATE
+   MOOMOO_PAPER_ACCOUNT_ID=<acc_id from step 6>
+   MOOMOO_TRD_MARKET=US
+   MOOMOO_SECURITY_FIRM=FUTUSECURITIES
+   ```
+8. **Verify the guard** after starting the backend:
+   ```bash
+   curl -s http://localhost:8000/api/trading/account | jq
+   ```
+   `verified` must be `true` and `source` must be `moomoo`; the endpoint never returns live account data.
+
+> Paper trading does not require an account unlock/trade password in the SDK. Live environments are rejected by `verify_paper_guard()` before any SDK call.
 
 ### 4. Run StockSense AI Backend
 
@@ -325,6 +370,11 @@ curl -s http://localhost:8000/api/stocks/MY.MAYBANK/realtime | jq
 | No data for symbol | Verify market code format (US.AAPL, MY.MAYBANK) |
 | Module not found | `pip install moomoo-api` |
 | Permission denied | Check moomoo account has market data rights |
+| `503 PAPER_ACCOUNT_ID_REQUIRED` | `MOOMOO_PAPER_ACCOUNT_ID` is empty — run the `get_acc_list` snippet above |
+| `PAPER_ACCOUNT_NOT_FOUND` | The `acc_id` does not match the account OpenD is logged into, or `trd_env` is not SIMULATE |
+| No SIMULATE row in `get_acc_list` | Create the paper account in the moomoo app (Me → Paper Trading); HK paper accounts need `filter_trdmarket=TrdMarket.HK` |
+| "The current securities account has not yet agreed to the disclaimer" | Accept the risk disclosure for your firm (e.g. [Moomoo SG](https://risk-disclosure.sg.moomoo.com/index?agreementNo=SGOT0015), [Moomoo MY](https://risk-disclosure.my.moomoo.com/index?agreementNo=MYOT0066)) and restart OpenD |
+| Order intercepted as Pattern Day Trader | US accounts: 4th day trade in 5 sessions is blocked by default; set `pdt_protection=0` in `OpenD.xml` only if you accept PDT rules |
 
 ---
 

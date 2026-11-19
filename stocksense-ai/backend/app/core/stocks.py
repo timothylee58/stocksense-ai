@@ -1,3 +1,5 @@
+import math
+
 # Top US stocks — market cap leaders + famous names
 # Moomoo market code format: US.{TICKER} for US stocks, MY.{TICKER} for Malaysia stocks
 STOCK_UNIVERSE: dict[str, dict] = {
@@ -56,6 +58,60 @@ MY_YF_TICKERS: dict[str, str] = {
     for k, v in STOCK_UNIVERSE.items()
     if v.get("market") == "MY" and "klse_code" in v
 }
+
+# moomoo addresses Bursa stocks by numeric KLSE code (MY.1155), not by name.
+MY_KLSE_CODES: dict[str, str] = {
+    k.split(".", 1)[1]: v["klse_code"]
+    for k, v in STOCK_UNIVERSE.items()
+    if v.get("market") == "MY" and "klse_code" in v
+}
+
+# Short names → SGX codes; moomoo addresses SG stocks as SG.<code> (SG.D05).
+SGX_CODES: dict[str, str] = {
+    "DBS":          "D05",
+    "UOB":          "U11",
+    "OCBC":         "O39",
+    "SINGTEL":      "Z74",
+    "SIA":          "C6L",
+    "SGX":          "S68",
+    "STENG":        "S63",
+    "CAPITALAND":   "9CI",
+    "KEPPEL":       "BN4",
+    "WILMAR":       "F34",
+    "THAIBEV":      "Y92",
+    "SATS":         "S58",
+    "SEMBCORP":     "U96",
+    "COMFORTDELGRO": "C52",
+    "VENTURE":      "V03",
+    "CDL":          "C09",
+}
+
+
+def get_security_code(ticker: str, market: str = "US") -> str:
+    """Exchange-native symbol moomoo expects (KLSE number for MY, SGX code for SG)."""
+    symbol = ticker.upper()
+    if "." in symbol:
+        symbol = symbol.split(".", 1)[1]
+    market = market.upper()
+    if market == "MY":
+        return MY_KLSE_CODES.get(symbol, symbol)
+    if market == "SG":
+        return SGX_CODES.get(symbol, symbol)
+    return symbol
+
+
+# Sub-cent values are corrupt feed artifacts, not quotes (e.g. yfinance resolving
+# the MY ticker "DIGI" to a $0.0001 OTC shell).
+MIN_VALID_PRICE = 0.01
+
+
+def valid_price(value) -> float:
+    """Coerce to a finite, plausible price; 0.0 means missing/corrupt."""
+    try:
+        price = float(value)
+    except (TypeError, ValueError):
+        return 0.0
+    return price if math.isfinite(price) and price >= MIN_VALID_PRICE else 0.0
 
 
 def get_stock_info(ticker: str) -> dict:

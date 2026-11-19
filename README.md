@@ -52,6 +52,27 @@ Stage 3 — LR Meta-Learner (calibrated stacker)
 
 ---
 
+## Paper Trading & Ops
+
+Execution is **SIMULATE-only**. `MOOMOO_TRD_ENV` must stay `SIMULATE`; the account guard refuses live environments before any SDK call and fails closed when `MOOMOO_PAPER_ACCOUNT_ID` is missing.
+
+Every order is evaluated by a deterministic pre-trade risk gate (kill switch, notional, position cap, gross exposure, cash buffer, daily loss, drawdown, over-sell), then written to the decision ledger **before** the broker is called. Approved, rejected, dry-run, duplicate, and failed outcomes are all recorded.
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| GET | `/api/trading/account` | Guard status + paper account snapshot |
+| GET | `/api/trading/positions` | Open paper positions |
+| GET | `/api/trading/decisions` | Decision/execution ledger (`limit`, `ticker`) |
+| POST | `/api/trading/orders` | Risk-gated order submission (`dry_run` supported) |
+| GET/POST | `/api/risk/kill-switch` | Read / trip the kill switch (POST needs `X-Admin-Token`) |
+| GET | `/api/portfolio/summary` | P&L, exposure, ledger counts; records an equity snapshot |
+| GET | `/api/portfolio/equity-curve` | Snapshot time series for the equity chart |
+| GET | `/api/portfolio/rejected` | Rejected orders with reason codes |
+
+The ops UI lives at `/dashboard/ops` (Recharts equity curve, positions, rejected-order log). Equity snapshots persist to ClickHouse `stocksense.portfolio_snapshots`, with `data/portfolio_history.jsonl` as the local fallback.
+
+---
+
 ## Tech Stack
 
 | Layer | Technology |
@@ -214,6 +235,27 @@ REDDIT_CLIENT_SECRET=your-reddit-secret
 
 # Auth
 SECRET_KEY=run-openssl-rand-hex-32
+ADMIN_API_TOKEN=run-openssl-rand-hex-32
+
+# Paper trading — SIMULATE only
+DEMO_MODE=false
+MOOMOO_TRADE_ENABLED=true
+MOOMOO_TRD_ENV=SIMULATE
+MOOMOO_PAPER_ACCOUNT_ID=from-challenge-dashboard
+MOOMOO_TRD_MARKET=US
+MOOMOO_SECURITY_FIRM=FUTUSECURITIES
+
+# Risk limits
+RISK_MAX_POSITION_PCT=0.25
+RISK_MAX_GROSS_EXPOSURE_PCT=0.90
+RISK_MAX_ORDER_NOTIONAL=50000
+RISK_MAX_DAILY_LOSS_PCT=0.03
+RISK_MAX_DRAWDOWN_PCT=0.15
+RISK_MIN_CASH_BUFFER_PCT=0.10
+
+# Ledger / snapshot fallbacks
+DECISION_LEDGER_JSONL=data/decision_ledger.jsonl
+PORTFOLIO_HISTORY_JSONL=data/portfolio_history.jsonl
 
 # ML
 ANOMALY_CONTAMINATION=0.08

@@ -51,3 +51,19 @@ def test_filters_by_ticker(monkeypatch, tmp_path):
     decision_ledger.record_decision(_decision(), "agent")
     assert len(decision_ledger.list_decisions(limit=10, ticker="AAPL")) == 1
     assert len(decision_ledger.list_decisions(limit=10, ticker="MSFT")) == 0
+
+
+def test_filters_by_status_and_counts_events(monkeypatch, tmp_path):
+    _patch_storage(monkeypatch, tmp_path)
+    decision_ledger.record_decision(_decision(), "agent")
+    decision_ledger.record_decision(_decision(kill=True), "agent")
+
+    rejected = decision_ledger.list_decisions(limit=10, status="rejected")
+    assert len(rejected) == 1
+    assert rejected[0]["status"] == "rejected"
+
+    stats = decision_ledger.ledger_stats()
+    assert stats["total_events"] == 2
+    assert stats["decisions"] == 2
+    assert stats["approved"] == 1
+    assert stats["rejected"] == 1

@@ -36,8 +36,9 @@ class Settings(BaseSettings):
     risk_max_drawdown_pct: float = 0.15
     risk_min_cash_buffer_pct: float = 0.10
 
-    # Decision ledger
+    # Decision ledger + equity history
     decision_ledger_jsonl: str = "data/decision_ledger.jsonl"
+    portfolio_history_jsonl: str = "data/portfolio_history.jsonl"
     admin_api_token: str = ""
 
     # Auth
@@ -84,7 +85,13 @@ class Settings(BaseSettings):
     default_tickers: list[str] = ["NVDA", "MAYBANK.KL", "PBBANK.KL"]
 
     # CORS (restrict in production)
-    allowed_origins: list[str] = ["http://localhost:3000", "https://main.your-app-id.amplifyapp.com"]
+    allowed_origins: list[str] = [
+        "http://localhost:3000",
+        "http://localhost:8081",  # Expo dev server / web
+        "http://localhost:8888",  # Next.js dev server
+        "http://127.0.0.1:8888",
+        "https://main.your-app-id.amplifyapp.com",
+    ]
 
     class Config:
         env_file = ".env"

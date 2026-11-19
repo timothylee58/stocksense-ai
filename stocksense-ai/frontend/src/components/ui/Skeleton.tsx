@@ -26,7 +26,7 @@ export function Skeleton({ className = "", width, height, radius }: SkeletonProp
         width: width ?? "100%",
         height: height ?? "1em",
         borderRadius: radius ?? 4,
-        background: "linear-gradient(90deg, rgba(0,153,255,0.08) 25%, rgba(0,153,255,0.15) 50%, rgba(0,153,255,0.08) 75%)",
+        background: "linear-gradient(90deg, rgba(23,25,30,0.05) 25%, rgba(23,25,30,0.10) 50%, rgba(23,25,30,0.05) 75%)",
         backgroundSize: "200% 100%",
         animation: "skeleton-shimmer 1.4s ease-in-out infinite",
         verticalAlign: "middle",

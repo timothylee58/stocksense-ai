@@ -90,3 +90,4 @@ postgres_data/
 redis_data/
 mlflow_data/
 spark-output/context/_session-state.json
+**/data/portfolio_history.jsonl

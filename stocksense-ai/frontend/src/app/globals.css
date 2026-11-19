@@ -1,41 +1,158 @@
 @import "tailwindcss";
 
-/* Fonts are loaded via next/font/google in layout.tsx — no @import needed here */
-
 :root {
-  --background: #030d1a;
-  --foreground: #e2f0ff;
+  --background: #f6f4ef;
+  --foreground: #17191e;
+  --paper: #ffffff;
+  --paper-alt: #fbfaf6;
+  --line: #e6e2d9;
+  --line-strong: #d8d3c8;
+  --ink: #17191e;
+  --ink-soft: #3c3e44;
+  --muted: #6e7075;
+  --faint: #9c978d;
+  --accent: #1f5e46;
+  --accent-soft: #e9f1ec;
+  --danger: #a33a31;
+  --danger-soft: #f9ebe8;
+  --warn: #8a6430;
+  --warn-soft: #f7efe1;
+  --info: #4251a8;
+  --info-soft: #eceef9;
+  --plum: #6b5ca5;
+  --track: #efede7;
+  --font-display: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Georgia, serif;
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  --font-mono: var(--font-space-mono, "Space Mono"), ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  /* --font-syne and --font-mono are injected by next/font on the <html> element */
-  --font-display: var(--font-syne);
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-}
-
-/* Bursa & dashboard font utility classes */
-.orb  { font-family: var(--font-syne), sans-serif; }
-.mono { font-family: var(--font-mono), monospace; }
-.card { background: rgba(0,12,28,0.8); border: 1px solid rgba(0,153,255,0.1); border-radius: 12px; }
-
-/* Custom scrollbars for dashboard pages */
-::-webkit-scrollbar { width: 4px; height: 4px; }
-::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: rgba(245,166,35,0.2); border-radius: 2px; }
-
-/* Smooth scrolling for anchor links */
 html {
   scroll-behavior: smooth;
 }
 
-/* Remove default outline, use custom focus styles */
+body {
+  background: var(--background);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+.serif,
+.orb {
+  font-family: var(--font-display);
+  letter-spacing: -0.012em;
+}
+
+.mono {
+  font-family: var(--font-mono);
+}
+
+.card {
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  box-shadow: 0 1px 2px rgba(23, 25, 30, 0.03), 0 14px 34px rgba(23, 25, 30, 0.045);
+}
+
+.metric-card {
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  transition: border-color 0.25s ease, transform 0.25s ease, box-shadow 0.25s ease;
+}
+
+.metric-card:hover {
+  border-color: var(--line-strong);
+  transform: translateY(-2px);
+  box-shadow: 0 12px 28px rgba(23, 25, 30, 0.06);
+}
+
+.nav-btn {
+  background: var(--paper);
+  border: 1px solid var(--line-strong);
+  color: var(--ink-soft);
+  transition: background 0.2s ease, border-color 0.2s ease;
+}
+
+.nav-btn:hover {
+  background: #ffffff;
+  border-color: var(--ink);
+}
+
+.eyebrow {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--paper);
+  padding: 4px 10px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.no-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+.paper-grid {
+  background-image:
+    linear-gradient(rgba(23, 25, 30, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(23, 25, 30, 0.035) 1px, transparent 1px);
+  background-size: 56px 56px;
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(23, 25, 30, 0.16);
+  border-radius: 999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(23, 25, 30, 0.28);
+}
+
 *:focus-visible {
-  outline: 1px solid rgba(0, 255, 200, 0.6);
+  outline: 2px solid rgba(31, 94, 70, 0.55);
   outline-offset: 2px;
+  border-radius: 4px;
+}
+
+::selection {
+  background: rgba(31, 94, 70, 0.16);
+}
+
+@keyframes skeleton-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
 }
