@@ -36,7 +36,7 @@ async def _run_shap(ticker: str) -> dict:
             "probability":    pred["confidence"],
             "expected_value": 0.5,
             "top_features": [
-                {"feature": sig.split(" —")[0].lower().replace("-", "_"), "value": 0.0, "contribution": round(pred["score"] * 0.2, 4)}
+                {"feature": sig.split(" —")[0].lower().replace("-", "_"), "contribution": round(pred["score"] * 0.2, 4)}
                 for sig in pred["signals"]
             ],
             "demo": True,

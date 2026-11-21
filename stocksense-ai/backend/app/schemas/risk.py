@@ -6,7 +6,6 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -49,13 +48,13 @@ class OrderIntent(BaseModel):
     side: OrderSide
     quantity: float = Field(gt=0)
     price: float = Field(gt=0)
-    order_type: OrderType = OrderType.MARKET
+    order_type: OrderType = OrderType.LIMIT
+    quote_ts: datetime | None = None
     dry_run: bool = True
     strategy_id: str = "manual"
     rationale: str = ""
     idempotency_key: str = ""
     model_version: str = ""
-    feature_snapshot: dict[str, Any] = Field(default_factory=dict)
 
     @field_validator("ticker")
     @classmethod
@@ -67,6 +66,13 @@ class OrderIntent(BaseModel):
     def _strip_text(cls, v: str) -> str:
         return v.strip()
 
+    @field_validator("quote_ts")
+    @classmethod
+    def _utc_quote_ts(cls, v: datetime | None) -> datetime | None:
+        if v is None:
+            return None
+        return v.replace(tzinfo=timezone.utc) if v.tzinfo is None else v.astimezone(timezone.utc)
+
 
 class RiskLimits(BaseModel):
     max_position_pct: float = 0.25
@@ -75,6 +81,12 @@ class RiskLimits(BaseModel):
     max_daily_loss_pct: float = 0.03
     max_drawdown_pct: float = 0.15
     min_cash_buffer_pct: float = 0.10
+    max_open_positions: int = 5
+    # Round 2 rules: no market orders, and entries must cite a fresh quote.
+    require_limit_orders: bool = True
+    max_quote_age_s: float | None = None
+    # Round 1 scope: US-only paper universe.
+    us_only: bool = True
 
     @classmethod
     def from_settings(cls) -> "RiskLimits":
@@ -87,6 +99,10 @@ class RiskLimits(BaseModel):
             max_daily_loss_pct=s.risk_max_daily_loss_pct,
             max_drawdown_pct=s.risk_max_drawdown_pct,
             min_cash_buffer_pct=s.risk_min_cash_buffer_pct,
+            max_open_positions=s.risk_max_open_positions,
+            require_limit_orders=s.risk_limit_orders_only,
+            max_quote_age_s=float(s.risk_max_quote_age_s) if s.risk_max_quote_age_s > 0 else None,
+            us_only=s.risk_us_only,
         )
 
 

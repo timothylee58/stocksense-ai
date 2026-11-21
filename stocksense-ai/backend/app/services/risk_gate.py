@@ -17,6 +17,7 @@ from app.schemas.risk import (
     KillSwitchState,
     OrderIntent,
     OrderSide,
+    OrderType,
     PortfolioSnapshot,
     RiskCheck,
     RiskDecision,
@@ -28,6 +29,10 @@ logger = logging.getLogger(__name__)
 KILL_SWITCH_KEY = "risk:kill_switch"
 
 KILL_SWITCH_ACTIVE = "KILL_SWITCH_ACTIVE"
+MARKET_ORDER_FORBIDDEN = "MARKET_ORDER_FORBIDDEN"
+QUOTE_TIMESTAMP_MISSING = "QUOTE_TIMESTAMP_MISSING"
+STALE_QUOTE = "STALE_QUOTE"
+UNIVERSE_NOT_TRADABLE = "UNIVERSE_NOT_TRADABLE"
 ORDER_NOTIONAL_EXCEEDED = "ORDER_NOTIONAL_EXCEEDED"
 POSITION_LIMIT_EXCEEDED = "POSITION_LIMIT_EXCEEDED"
 GROSS_EXPOSURE_EXCEEDED = "GROSS_EXPOSURE_EXCEEDED"
@@ -35,10 +40,19 @@ INSUFFICIENT_CASH = "INSUFFICIENT_CASH"
 CASH_BUFFER_BREACHED = "CASH_BUFFER_BREACHED"
 DAILY_LOSS_LIMIT_BREACHED = "DAILY_LOSS_LIMIT_BREACHED"
 MAX_DRAWDOWN_BREACHED = "MAX_DRAWDOWN_BREACHED"
+MAX_OPEN_POSITIONS_EXCEEDED = "MAX_OPEN_POSITIONS_EXCEEDED"
 POSITION_NOT_HELD = "POSITION_NOT_HELD"
 
 # In-process fallback when Redis is unavailable.
 _memory_kill_switch = KillSwitchState()
+
+_NON_US_PREFIXES = ("MY.", "HK.", "SG.", "SH.", "SZ.", "CA.")
+_NON_US_SUFFIXES = (".KL", ".HK", ".SI", ".SG", ".SS", ".SZ", ".BJ", ".TO", ".V")
+
+
+def is_us_ticker(ticker: str) -> bool:
+    t = ticker.strip().upper()
+    return not (t.startswith(_NON_US_PREFIXES) or t.endswith(_NON_US_SUFFIXES))
 
 
 def _check(name: str, passed: bool, code: str, detail: str) -> RiskCheck:
@@ -51,9 +65,11 @@ def evaluate_order(
     portfolio: PortfolioSnapshot,
     limits: RiskLimits,
     kill_switch: KillSwitchState | None = None,
+    now: datetime | None = None,
 ) -> RiskDecision:
     """Evaluate one order. No I/O — deterministic and replayable."""
     ks = kill_switch or KillSwitchState()
+    now = now or datetime.now(timezone.utc)
     equity = portfolio.equity
     held = portfolio.position_for(intent.ticker)
     gross_before = sum(abs(p.market_value) for p in portfolio.positions)
@@ -67,6 +83,39 @@ def evaluate_order(
         KILL_SWITCH_ACTIVE,
         "kill switch active — new buys blocked, sells allowed" if ks.enabled else "inactive",
     ))
+
+    if limits.require_limit_orders:
+        checks.append(_check(
+            "order_type",
+            intent.order_type == OrderType.LIMIT,
+            MARKET_ORDER_FORBIDDEN,
+            f"order_type={intent.order_type.value}; limit orders only",
+        ))
+
+    if limits.us_only:
+        in_universe = is_us_ticker(intent.ticker)
+        checks.append(_check(
+            "universe",
+            in_universe,
+            UNIVERSE_NOT_TRADABLE,
+            f"{intent.ticker} is in the US-only paper universe" if in_universe
+            else f"{intent.ticker} is outside the US-only paper universe",
+        ))
+
+    if is_buy and limits.max_quote_age_s is not None:
+        if intent.quote_ts is None:
+            checks.append(_check(
+                "quote_freshness", False, QUOTE_TIMESTAMP_MISSING,
+                "buys must cite quote_ts for the price they were sized on",
+            ))
+        else:
+            age_s = (now - intent.quote_ts).total_seconds()
+            checks.append(_check(
+                "quote_freshness",
+                -1.0 <= age_s <= limits.max_quote_age_s,
+                STALE_QUOTE,
+                f"quote age {age_s:.0f}s vs max {limits.max_quote_age_s:.0f}s",
+            ))
 
     if is_buy:
         checks.append(_check(
@@ -125,6 +174,15 @@ def evaluate_order(
             drawdown_pct < limits.max_drawdown_pct,
             MAX_DRAWDOWN_BREACHED,
             f"{drawdown_pct:.1%} vs limit {limits.max_drawdown_pct:.1%}",
+        ))
+
+        open_positions = sum(1 for p in portfolio.positions if p.quantity > 0)
+        adding_new_name = held.quantity <= 0
+        checks.append(_check(
+            "open_positions",
+            not adding_new_name or open_positions < limits.max_open_positions,
+            MAX_OPEN_POSITIONS_EXCEEDED,
+            f"{open_positions} open vs limit {limits.max_open_positions}",
         ))
     else:
         projected_gross_pct = max(0.0, gross_before - notional) / equity

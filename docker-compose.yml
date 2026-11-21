@@ -60,24 +60,28 @@ services:
 
   backend:
     build:
-      context: ./backend
+      context: ./stocksense-ai/backend
       dockerfile: Dockerfile
+      target: serving
+      args:
+        MODEL_TICKERS: ${MODEL_TICKERS:-advertised}
     restart: unless-stopped
     ports:
       - "8000:8000"
     environment:
-      - ALLOWED_ORIGINS=http://localhost:3000,http://frontend:3000
+      - 'ALLOWED_ORIGINS=["http://localhost:3000","http://frontend:3000"]'
       - REDIS_URL=redis://redis:6379
       - DATABASE_URL=postgresql://stocksense:stocksense_pass@postgres:5432/stocksense
       - SECRET_KEY=${SECRET_KEY:-change-me-in-production}
-      - DEMO_MODE=${DEMO_MODE:-true}
+      - DEMO_MODE=${DEMO_MODE:-false}
+      - MOOMOO_TRADE_ENABLED=false
+      - MOOMOO_TRD_ENV=SIMULATE
       - CLICKHOUSE_HOST=clickhouse
       - CLICKHOUSE_PORT=8123
       - CLICKHOUSE_USER=stocksense
       - CLICKHOUSE_PASSWORD=${CLICKHOUSE_PASSWORD:-stocksense_ch}
       - CLICKHOUSE_DB=stocksense
-    volumes:
-      - model_data:/app/models
+    # Use the validated immutable image bundle; a volume would mask it with stale models.
     depends_on:
       redis:
         condition: service_healthy
@@ -96,16 +100,17 @@ services:
     build:
       context: ./stocksense-ai/frontend
       dockerfile: Dockerfile
+      args:
+        # Public browser URL, compiled by Next.js (not Docker's backend hostname).
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
     restart: unless-stopped
     ports:
       - "3000:3000"
-    environment:
-      - NEXT_PUBLIC_API_URL=http://localhost:8000
     depends_on:
       backend:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:3000 || exit 1"]
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3000').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
       interval: 20s
       timeout: 10s
       retries: 3
@@ -115,4 +120,3 @@ volumes:
   redis_data:
   postgres_data:
   clickhouse_data:
-  model_data:

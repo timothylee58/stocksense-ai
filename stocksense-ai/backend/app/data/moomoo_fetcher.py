@@ -19,18 +19,20 @@ import pandas as pd
 
 try:
     import moomoo as ft
-    from moomoo import OpenQuoteContext, RET_OK, RET_ERROR, SubType
+    from moomoo import AuType, KLType, OpenQuoteContext, RET_OK, RET_ERROR, SubType
     _HAS_MOOMOO = True
 except ImportError:
     _HAS_MOOMOO = False
     ft = None
+    AuType = None
+    KLType = None
     OpenQuoteContext = None
     RET_OK = None
     RET_ERROR = None
     SubType = None
 
 from app.core.config import get_settings
-from app.core.stocks import get_security_code, valid_price
+from app.core.stocks import get_security_code, get_yfinance_symbol, valid_price
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -96,11 +98,11 @@ async def fetch_realtime_quote(ticker: str, market: str = "US") -> dict:
     """
     if not _HAS_MOOMOO:
         logger.warning("moomoo-api not available, falling back to yfinance")
-        return await _fallback_yfinance_quote(ticker)
+        return await _fallback_yfinance_quote(ticker, market)
 
     client = MoomooClient.get_client()
     if client is None:
-        return await _fallback_yfinance_quote(ticker)
+        return await _fallback_yfinance_quote(ticker, market)
 
     code = get_moomoo_code(ticker, market)
 
@@ -109,13 +111,13 @@ async def fetch_realtime_quote(ticker: str, market: str = "US") -> dict:
         ret_sub, err = client.subscribe([code], [SubType.QUOTE], subscribe_push=False)
         if ret_sub != RET_OK:
             logger.error(f"Subscribe failed for {code}: {err}")
-            return await _fallback_yfinance_quote(ticker)
+            return await _fallback_yfinance_quote(ticker, market)
 
         # Get quote data
         ret, data = client.get_stock_quote([code])
         if ret != RET_OK or data is None or len(data) == 0:
             logger.warning(f"No quote data for {code}")
-            return await _fallback_yfinance_quote(ticker)
+            return await _fallback_yfinance_quote(ticker, market)
 
         row = data.iloc[0] if isinstance(data, pd.DataFrame) else data
 
@@ -139,7 +141,7 @@ async def fetch_realtime_quote(ticker: str, market: str = "US") -> dict:
         }
     except Exception as e:
         logger.error(f"Error fetching quote for {code}: {e}")
-        return await _fallback_yfinance_quote(ticker)
+        return await _fallback_yfinance_quote(ticker, market)
 
 
 async def fetch_tick_data(ticker: str, market: str = "US", num_ticks: int = 100) -> pd.DataFrame:
@@ -263,24 +265,26 @@ async def fetch_market_snapshot(market: str = "US") -> pd.DataFrame:
         return pd.DataFrame()
 
 
-async def _fallback_yfinance_quote(ticker: str) -> dict:
+async def _fallback_yfinance_quote(ticker: str, market: str = "US") -> dict:
     """Fallback to yfinance when moomoo is unavailable."""
     try:
         import yfinance as yf
-        data = yf.download(ticker, period="1d", progress=False, auto_adjust=True)
+        symbol = get_yfinance_symbol(ticker, market)
+        data = yf.download(symbol, period="1d", progress=False, auto_adjust=True)
         if isinstance(data.columns, pd.MultiIndex):
             data.columns = data.columns.get_level_values(0)
 
         if len(data) == 0:
-            return {"ticker": ticker, "last_price": 0.0, "source": "yfinance_fallback"}
+            return {"ticker": ticker, "market": market, "last_price": 0.0, "source": "yfinance_fallback"}
 
         last_row = data.iloc[-1]
         last_price = valid_price(last_row.get("Close"))
         if not last_price:
-            return {"ticker": ticker, "last_price": 0.0, "source": "yfinance_fallback"}
+            return {"ticker": ticker, "market": market, "last_price": 0.0, "source": "yfinance_fallback"}
 
         return {
             "ticker": ticker,
+            "market": market,
             "last_price": last_price,
             "open_price": valid_price(last_row.get("Open")),
             "high_price": valid_price(last_row.get("High")),
@@ -290,44 +294,48 @@ async def _fallback_yfinance_quote(ticker: str) -> dict:
             "update_time": datetime.now().isoformat(),
         }
     except Exception as e:
-        logger.error(f"yfinance fallback failed: {e}")
-        return {"ticker": ticker, "last_price": 0.0, "source": "error"}
+        logger.error(f"yfinance fallback failed for {ticker}: {e}")
+        return {"ticker": ticker, "market": market, "last_price": 0.0, "source": "error"}
 
 
 # For compatibility with existing fetcher.py
 async def fetch_stock_data_moomoo(ticker: str, period_days: int = 60) -> pd.DataFrame:
     """
     Fetch historical data via moomoo K-line data.
-    Note: moomoo is optimized for real-time data; for extensive historical analysis,
-    yfinance may still be preferred.
+    Returns an empty frame when OpenD cannot serve the code so the caller
+    (fetch_stock_data) can fall back to yfinance without re-entering itself.
     """
     if not _HAS_MOOMOO:
-        from app.data.fetcher import fetch_stock_data
-        return await fetch_stock_data(ticker, period_days // 30)
+        return pd.DataFrame()
 
     client = MoomooClient.get_client()
     if client is None:
-        from app.data.fetcher import fetch_stock_data
-        return await fetch_stock_data(ticker, period_days // 30)
+        return pd.DataFrame()
 
     code = get_moomoo_code(ticker, "US")
 
     try:
-        # Fetch daily K-line data
+        # K-lines require a KL_DAY subscription before the candlestick call.
+        ret_sub, err_sub = client.subscribe([code], [SubType.K_DAY], subscribe_push=False)
+        if ret_sub != RET_OK:
+            logger.warning(f"K-line subscribe failed for {code}: {err_sub}")
+            return pd.DataFrame()
+
+        # SDK signature: get_cur_kline(code, num, ktype, autype)
         ret, data = client.get_cur_kline(
             code,
-            ktype=ft.KLType.K_DAY,
-            klnum=period_days,
-            autype=ft.KLType.QFQ  # Adjusted for splits/dividends
+            period_days,
+            ktype=KLType.K_DAY,
+            autype=AuType.QFQ,
         )
 
         if ret != RET_OK or data is None or len(data) == 0:
-            logger.warning(f"No K-line data for {code}, falling back to yfinance")
-            from app.data.fetcher import fetch_stock_data
-            return await fetch_stock_data(ticker, period_days // 30)
+            logger.warning(f"No K-line data for {code}: {data}")
+            return pd.DataFrame()
 
         # Rename columns to match existing format
         df = data.rename(columns={
+            "time_key": "Date",
             "time": "Date",
             "open": "Open",
             "high": "High",
@@ -348,5 +356,4 @@ async def fetch_stock_data_moomoo(ticker: str, period_days: int = 60) -> pd.Data
 
     except Exception as e:
         logger.error(f"Error fetching K-line data for {code}: {e}")
-        from app.data.fetcher import fetch_stock_data
-        return await fetch_stock_data(ticker, period_days // 30)
+        return pd.DataFrame()

@@ -92,6 +92,7 @@ export default function TradeScreen() {
         quantity: qty,
         price: limit,
         order_type: "LIMIT",
+        quote_ts: new Date().toISOString(),
         dry_run: dryRun,
         strategy_id: "manual-mobile",
         rationale: `Manual ${side} from StockSense Ops mobile`,

@@ -101,8 +101,8 @@ def shap_explain(df: pd.DataFrame, ticker: str) -> dict:
               else float(explainer.expected_value[1])
 
     features = [
-        {"feature": fn, "value": round(float(fv), 4), "contribution": round(float(c), 4)}
-        for fn, fv, c in zip(X.columns, X_last[0], sv)
+        {"feature": fn, "contribution": round(float(c), 4)}
+        for fn, c in zip(X.columns, sv)
     ]
     features.sort(key=lambda f: abs(f["contribution"]), reverse=True)
 
@@ -112,23 +112,22 @@ def shap_explain(df: pd.DataFrame, ticker: str) -> dict:
         "probability":    round(prob_up, 4),
         "expected_value": round(ev, 4),
         "top_features":   features[:12],   # top 12 most impactful
-        "all_features":   features,
     }
 
 
 def predict_xgboost(df: pd.DataFrame, ticker: str) -> tuple[float, float]:
     """
-    Run XGBoost on latest row.
-    Returns (prob_up, prob_down) as floats.
-    Trains model if none exists.
+    Run the pre-trained XGBoost artefact on the latest row.
+    Returns (prob_up, prob_down). Missing artefacts yield neutral
+    probabilities — inference never trains.
     """
     mp = _model_path(ticker)
-    if os.path.exists(mp):
-        model = xgb.XGBClassifier()
-        model.load_model(mp)
-    else:
-        logger.info("No XGBoost model for %s — training now", ticker)
-        model = train_xgboost(df, ticker)
+    if not os.path.exists(mp):
+        logger.warning("No XGBoost artefact for %s — returning neutral probabilities", ticker)
+        return 0.5, 0.5
+
+    model = xgb.XGBClassifier()
+    model.load_model(mp)
 
     X = build_feature_matrix(df, include_anomaly=True)
     if X.empty:

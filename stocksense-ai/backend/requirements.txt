@@ -1,3 +1,8 @@
+# Serving dependencies for Python 3.12.15. Docker installs torch from the CPU
+# index first; do not resolve torch from the default Linux CUDA wheel index.
+# MLflow 2.17 (requires numpy<2) and Optuna are offline training tools, not runtime.
+# Test/lint tooling is installed only in the Docker test stage.
+
 # Web framework
 fastapi==0.115.0
 uvicorn[standard]==0.30.6
@@ -8,24 +13,23 @@ python-dotenv==1.0.1
 # Data
 yfinance>=0.2.44
 moomoo-api>=10.2.6208
-pandas>=2.2.3
-numpy>=1.26.4
-pandas-ta>=0.3.14b
+pandas==2.3.3
+numpy==2.2.6
+pandas-ta==0.4.71b0
 
-# ML core
-torch>=2.5.1
-xgboost>=2.1.1
-scikit-learn>=1.5.2
-joblib>=1.4.2
+# Serialized-model compatibility: verified training environment, no loose ranges.
+torch==2.15.0
+xgboost-cpu==3.4.1; platform_system == "Linux"
+xgboost==3.4.1; platform_system != "Linux"
+scikit-learn==1.9.1
+joblib==1.6.0
 
 # NLP / Sentiment
 transformers==4.46.0
 tokenizers==0.20.3
 
-# ML ops
-mlflow==2.17.0
-optuna==4.0.0
-shap==0.46.0
+# Required by the live explanation route; verified installed NumPy-2-compatible version.
+shap==0.54.1
 
 # Data ingestion
 newsapi-python==0.2.7
@@ -51,12 +55,9 @@ websockets==13.1
 httpx==0.27.2
 sse-starlette==2.1.3
 
-# Testing
-pytest==8.3.3
-pytest-asyncio==0.24.0
-
 # AI / LLM
 anthropic>=0.40.0
 
 # Utils
 python-multipart==0.0.12
+PyYAML>=6.0.1

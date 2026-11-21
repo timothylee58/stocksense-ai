@@ -1,9 +1,8 @@
 from fastapi import APIRouter
-from app.api.routes import predict, train, stocks, websocket, anomalies, sentiment, stream, health, briefing, bursa, explain, backtest, trading, portfolio
+from app.api.routes import predict, stocks, websocket, anomalies, sentiment, stream, health, briefing, bursa, explain, backtest, trading, portfolio, agents, agent_run
 
 api_router = APIRouter()
 api_router.include_router(predict.router,    tags=["Predictions"])
-api_router.include_router(train.router,      tags=["Training"])
 api_router.include_router(stocks.router,     tags=["Stocks"])
 api_router.include_router(websocket.router,  tags=["WebSocket"])
 api_router.include_router(anomalies.router,  tags=["Anomalies"])
@@ -16,3 +15,7 @@ api_router.include_router(explain.router,    tags=["Explainability"])
 api_router.include_router(backtest.router,   tags=["Backtest"])
 api_router.include_router(trading.router,    tags=["Trading"])
 api_router.include_router(portfolio.router,  tags=["Portfolio"])
+# Agent-run routes go first: /agents/runs and /agents/reconciliation would
+# otherwise be captured by /agents/{agent_id}.
+api_router.include_router(agent_run.router,  tags=["Agent Runs"])
+api_router.include_router(agents.router,     tags=["Agents"])

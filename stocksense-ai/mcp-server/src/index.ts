@@ -2,7 +2,6 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { registerPredictionTool } from "./tools/prediction.js";
 import { registerAnomaliesTool } from "./tools/anomalies.js";
-import { registerRetrainTool } from "./tools/retrain.js";
 import { registerSentimentTool } from "./tools/sentiment.js";
 import { registerMlflowTools } from "./tools/mlflow.js";
 
@@ -13,7 +12,6 @@ const server = new McpServer({
 
 registerPredictionTool(server);
 registerAnomaliesTool(server);
-registerRetrainTool(server);
 registerSentimentTool(server);
 registerMlflowTools(server);
 

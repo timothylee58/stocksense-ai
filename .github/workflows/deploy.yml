@@ -1,39 +1,74 @@
 name: Deploy
 
 on:
-  push:
-    branches: [main]
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [master]
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: deploy-backend-master
+  cancel-in-progress: false
 
 env:
   AWS_REGION: ap-southeast-1
   ECR_REPOSITORY: stocksense/backend
+  MODEL_TICKERS: ${{ vars.MODEL_TICKERS || 'advertised' }}
 
+# Vercel's independent Git integration is outside this backend release gate.
+# Prerequisites: protected master; production environment restricted to master
+# with required reviewers; trusted/versioned MODELS_S3_URI; retained old ECR digests.
+# Rollback (separately authorized): restore the previous ImageIdentifier recorded
+# in the job summary, preserving all other App Runner source/runtime settings.
 jobs:
-  deploy-frontend:
-    name: Deploy Frontend → AWS Amplify
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ env.AWS_REGION }}
-
-      - name: Trigger Amplify build
-        run: |
-          aws amplify start-job \
-            --app-id "${{ secrets.AMPLIFY_APP_ID }}" \
-            --branch-name main \
-            --job-type RELEASE
-
   deploy-backend:
-    name: Build & Deploy Backend → AWS App Runner
+    name: Validate & Deploy Checked Backend Revision
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_branch == 'master' &&
+      github.event.workflow_run.head_repository.full_name == github.repository &&
+      github.event.workflow_run.repository.full_name == github.repository
     runs-on: ubuntu-latest
+    timeout-minutes: 45
+    environment: production
     steps:
+      - name: Verify CI identity, source repository and current master head
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const trigger = context.payload.workflow_run;
+            const { data: run } = await github.rest.actions.getWorkflowRun({
+              ...context.repo, run_id: trigger.id
+            });
+            const { data: branch } = await github.rest.repos.getBranch({
+              ...context.repo, branch: 'master'
+            });
+            const repository = `${context.repo.owner}/${context.repo.repo}`;
+            if (run.path !== '.github/workflows/ci.yml' ||
+                run.status !== 'completed' || run.conclusion !== 'success' ||
+                run.event !== 'push' || run.head_branch !== 'master' ||
+                run.repository.full_name !== repository ||
+                run.head_repository.full_name !== repository ||
+                !branch.protected ||
+                run.head_sha !== trigger.head_sha || run.head_sha !== branch.commit.sha) {
+              core.setFailed('Refusing deployment: CI must pass for this repository and current master SHA');
+            }
+
       - uses: actions/checkout@v4
+        with:
+          # github.sha on workflow_run is NOT necessarily the checked revision.
+          ref: ${{ github.event.workflow_run.head_sha }}
+          persist-credentials: false
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Recheck exact revision without secrets or artifacts
+        run: docker build --platform linux/amd64 --target test ./stocksense-ai/backend
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -41,26 +76,90 @@ jobs:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
+
+      # No PR workflow artifacts/caches are consumed by this privileged workflow.
+      # Pickle is executable: this authenticated S3 prefix must be controlled by
+      # the trusted offline model publisher, never user uploads or PR jobs.
+      - name: Fetch trusted pre-trained artifacts from S3
+        env:
+          MODELS_S3_URI: ${{ secrets.MODELS_S3_URI }}
+          DATA_S3_URI: ${{ secrets.DATA_S3_URI }}
+        run: |
+          set -euo pipefail
+          if [[ "$MODELS_S3_URI" != s3://* ]]; then
+            echo "::error::MODELS_S3_URI must name a trusted, versioned S3 model prefix"
+            exit 1
+          fi
+          mkdir -p stocksense-ai/backend/models stocksense-ai/backend/data
+          aws s3 sync "${MODELS_S3_URI%/}/" stocksense-ai/backend/models/
+          if [ -n "$DATA_S3_URI" ]; then
+            aws s3 sync "${DATA_S3_URI%/}/" stocksense-ai/backend/data/
+          fi
 
       - name: Login to Amazon ECR
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Build, tag & push image to ECR
+      - name: Build serving image and load the entire configured model bundle
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+          docker build --platform linux/amd64 --target serving \
+            --build-arg "MODEL_TICKERS=$MODEL_TICKERS" \
+            -t "$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" \
+            ./stocksense-ai/backend
+
+      - name: Refuse stale master before publishing
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { data: branch } = await github.rest.repos.getBranch({
+              ...context.repo, branch: 'master'
+            });
+            if (branch.commit.sha !== context.payload.workflow_run.head_sha) {
+              core.setFailed('master advanced during validation; wait for CI on the new revision');
+            }
+
+      - name: Push immutable checked image (never latest)
         id: build-image
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          IMAGE_TAG: ${{ github.sha }}
+          IMAGE_TAG: ${{ github.event.workflow_run.head_sha }}
         run: |
-          docker build \
-            -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG \
-            -t $ECR_REGISTRY/$ECR_REPOSITORY:latest \
-            ./stocksense-ai/backend
-          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
-          docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
-          echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_OUTPUT
+          set -euo pipefail
+          image="$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
+          docker push "$image"
+          digest=$(docker inspect --format '{{index .RepoDigests 0}}' "$image")
+          echo "image=$digest" >> "$GITHUB_OUTPUT"
 
-      - name: Trigger App Runner deployment
+      - name: Recheck protected head immediately before service update
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { data: branch } = await github.rest.repos.getBranch({
+              ...context.repo, branch: 'master'
+            });
+            if (!branch.protected || branch.commit.sha !== context.payload.workflow_run.head_sha) {
+              core.setFailed('Refusing stale or unprotected master deployment');
+            }
+
+      - name: Deploy exact image digest and record rollback reference
+        env:
+          SERVICE_ARN: ${{ secrets.APP_RUNNER_SERVICE_ARN }}
+          IMAGE_DIGEST: ${{ steps.build-image.outputs.image }}
         run: |
-          aws apprunner start-deployment \
-            --service-arn "${{ secrets.APP_RUNNER_SERVICE_ARN }}"
+          set -euo pipefail
+          aws apprunner describe-service --service-arn "$SERVICE_ARN" \
+            --query Service.SourceConfiguration --output json > "$RUNNER_TEMP/source-before.json"
+          jq -e '.ImageRepository.ImageRepositoryType == "ECR"' "$RUNNER_TEMP/source-before.json" > /dev/null
+          previous=$(jq -r '.ImageRepository.ImageIdentifier' "$RUNNER_TEMP/source-before.json")
+          echo "Previous backend image (rollback): $previous" >> "$GITHUB_STEP_SUMMARY"
+          echo "Checked replacement: $IMAGE_DIGEST" >> "$GITHUB_STEP_SUMMARY"
+          # Preserve credentials, port, environment and other existing settings.
+          jq --arg image "$IMAGE_DIGEST" '.ImageRepository.ImageIdentifier = $image' \
+            "$RUNNER_TEMP/source-before.json" > "$RUNNER_TEMP/source-after.json"
+          aws apprunner update-service --service-arn "$SERVICE_ARN" \
+            --source-configuration "file://$RUNNER_TEMP/source-after.json" \
+            --query OperationId --output text

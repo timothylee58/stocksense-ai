@@ -51,7 +51,8 @@ def _row_from_decision(
         "checks": json.dumps([c.model_dump() for c in decision.checks], ensure_ascii=False),
         "strategy_id": order.strategy_id,
         "model_version": order.model_version,
-        "feature_snapshot": json.dumps(order.feature_snapshot, ensure_ascii=False),
+        # Column kept for schema compatibility; raw feature vectors are never stored.
+        "feature_snapshot": "",
         "order_id": order_id,
         "message": message,
         "actor": actor,
@@ -64,6 +65,7 @@ def _write_jsonl(row: dict) -> None:
     path = Path(settings.decision_ledger_jsonl)
     path.parent.mkdir(parents=True, exist_ok=True)
     record = dict(row)
+    record.pop("feature_snapshot", None)
     record["event_time"] = row["event_time"].isoformat()
     with _jsonl_lock:
         with path.open("a", encoding="utf-8") as fh:
@@ -109,6 +111,8 @@ def record_execution(decision: RiskDecision, execution: OrderExecution, actor: s
 
 def _normalise(record: dict) -> dict:
     out = dict(record)
+    # Older JSONL rows may carry a feature snapshot; never surface it.
+    out.pop("feature_snapshot", None)
     if isinstance(out.get("event_time"), datetime):
         out["event_time"] = out["event_time"].isoformat()
     if "dry_run" in out:
@@ -140,7 +144,7 @@ def list_decisions(
                 SELECT decision_id, idempotency_key, event_type, status, account_id,
                        ticker, side, quantity, price, notional, dry_run,
                        reason_codes, checks, strategy_id, model_version,
-                       feature_snapshot, order_id, message, actor, event_time
+                       order_id, message, actor, event_time
                 FROM decision_ledger {where}
                 ORDER BY event_time DESC
                 LIMIT {{limit:UInt32}}

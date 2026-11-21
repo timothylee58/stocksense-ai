@@ -105,6 +105,7 @@ export const api = {
     quantity: number;
     price: number;
     order_type: "LIMIT" | "MARKET";
+    quote_ts: string;
     dry_run: boolean;
     strategy_id: string;
     rationale: string;

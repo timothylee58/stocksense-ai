@@ -100,6 +100,11 @@ async def submit_order(intent: OrderIntent, x_agent_id: str = Header(default="ag
     Returns a structured decision even when blocked, so the agent can explain
     every rejection from the same payload.
     """
+    if get_settings().read_only_mode:
+        raise HTTPException(
+            status_code=403,
+            detail={"code": "READ_ONLY_MODE", "message": "trading runs only on the local paper stack"},
+        )
     actor = x_agent_id.strip() or "agent"
     if not intent.idempotency_key:
         intent.idempotency_key = f"auto-{uuid.uuid4()}"
@@ -190,6 +195,11 @@ async def write_kill_switch(
     x_agent_id: str = Header(default="admin", alias="X-Agent-Id"),
 ):
     _require_admin(x_admin_token)
+    if get_settings().read_only_mode:
+        raise HTTPException(
+            status_code=403,
+            detail={"code": "READ_ONLY_MODE", "message": "kill switch is operator-only on the local stack"},
+        )
     state = await set_kill_switch(body.enabled, body.reason, x_agent_id)
     logger.warning("Kill switch set to %s by %s: %s", body.enabled, x_agent_id, body.reason)
     return state.model_dump(mode="json")

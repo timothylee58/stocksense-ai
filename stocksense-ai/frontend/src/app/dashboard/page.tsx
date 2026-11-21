@@ -5,11 +5,12 @@ import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, ReferenceLine, ComposedChart, Line,
 } from "recharts";
-import { AnimatePresence, motion } from "framer-motion";
-import { TrendingUp, TrendingDown, AlertTriangle, ChevronRight, Upload, CheckCircle2, XCircle, RefreshCw } from "lucide-react";
+import { motion } from "framer-motion";
+import { TrendingUp, TrendingDown, AlertTriangle, ChevronRight, RefreshCw } from "lucide-react";
 import Link from "next/link";
 import { PredictionResponse, StockInfo } from "@/types/stock";
 import StockBriefingPanel from "@/components/StockBriefingPanel";
+import AgentOpsPanel from "@/components/AgentOpsPanel";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
@@ -131,93 +132,6 @@ function TimingGauge({ score }: { score: number }) {
   );
 }
 
-type FlowState = "idle" | "uploading" | "success" | "error";
-
-function ProgressFlowState({
-  state,
-  progress,
-}: {
-  state: FlowState;
-  progress: number;
-}) {
-  return (
-    <div className="relative h-9 w-40">
-      <AnimatePresence mode="wait">
-        {state === "idle" && (
-          <motion.div
-            key="idle"
-            layout
-            initial={{ opacity: 0, scale: 0.94 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.94 }}
-            className="absolute inset-0 flex items-center justify-center gap-2 rounded-full border"
-            style={{ borderColor: C.line, background: C.panel, color: C.muted }}
-          >
-            <Upload size={12} />
-            <span className="mono text-[9px] uppercase tracking-[0.12em]">Idle</span>
-          </motion.div>
-        )}
-
-        {state === "uploading" && (
-          <motion.div
-            key="uploading"
-            layout
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.95 }}
-            className="absolute inset-0 rounded-full border px-3 py-1.5"
-            style={{ borderColor: C.line, background: C.infoSoft }}
-          >
-            <div className="mono flex items-center justify-between text-[9px] uppercase tracking-[0.10em]" style={{ color: C.info }}>
-              <span>Training</span>
-              <span>{Math.round(progress)}%</span>
-            </div>
-            <div className="mt-1 h-0.5 w-full rounded-full" style={{ background: C.line }}>
-              <motion.div
-                animate={{ width: `${progress}%` }}
-                transition={{ ease: "easeOut" }}
-                className="h-0.5 rounded-full"
-                style={{ background: C.info }}
-              />
-            </div>
-          </motion.div>
-        )}
-
-        {state === "success" && (
-          <motion.div
-            key="success"
-            layout
-            initial={{ scale: 0.84, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            exit={{ opacity: 0, scale: 0.94 }}
-            transition={{ type: "spring", stiffness: 300, damping: 20 }}
-            className="absolute inset-0 flex items-center justify-center gap-2 rounded-full border"
-            style={{ borderColor: C.accent, background: C.accentSoft, color: C.accent }}
-          >
-            <CheckCircle2 size={12} />
-            <span className="mono text-[9px] uppercase tracking-[0.12em]">Started</span>
-          </motion.div>
-        )}
-
-        {state === "error" && (
-          <motion.div
-            key="error"
-            layout
-            initial={{ opacity: 0, scale: 0.94 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.94 }}
-            className="absolute inset-0 flex items-center justify-center gap-2 rounded-full border"
-            style={{ borderColor: C.danger, background: C.dangerSoft, color: C.danger }}
-          >
-            <XCircle size={12} />
-            <span className="mono text-[9px] uppercase tracking-[0.12em]">Failed</span>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
-  );
-}
-
 function Skeleton({ className }: { className?: string }) {
   return (
     <motion.div
@@ -294,10 +208,6 @@ export default function Dashboard() {
   const [error, setError] = useState<string | null>(null);
   const [livePrice, setLivePrice] = useState<number | null>(null);
   const [watchlist, setWatchlist] = useState<string[]>([]);
-  const [training, setTraining] = useState(false);
-  const [trainStatus, setTrainStatus] = useState<string | null>(null);
-  const [flowState, setFlowState] = useState<FlowState>("idle");
-  const [flowProgress, setFlowProgress] = useState(0);
   // Mini data for the grid cards
   const [cardData, setCardData] = useState<Record<string, { price: number; signal: string; changePct: number; spark: number[] }>>({});
   const wsRef = useRef<WebSocket | null>(null);
@@ -387,41 +297,6 @@ export default function Dashboard() {
     fetchWatchlist();
   };
 
-  const trainModel = async () => {
-    setTraining(true);
-    setFlowState("uploading");
-    setFlowProgress(6);
-    setTrainStatus("Training LSTM + XGBoost...");
-    const startedAt = Date.now();
-    const tick = window.setInterval(() => {
-      setFlowProgress((p) => Math.min(92, p + (92 - p) * 0.16 + 1));
-    }, 250);
-    try {
-      await fetch(`${API_URL}/api/train/${activeTicker}`, { method: "POST" });
-      window.clearInterval(tick);
-      setFlowProgress(100);
-      setFlowState("success");
-      setTrainStatus("Training started in background — refresh in ~2 min");
-      window.setTimeout(() => {
-        fetchPrediction(activeTicker);
-        setTrainStatus(null);
-        setFlowState("idle");
-        setFlowProgress(0);
-      }, 2000);
-    } catch {
-      window.clearInterval(tick);
-      setFlowState("error");
-      setTrainStatus("Training request failed");
-      window.setTimeout(() => {
-        setFlowState("idle");
-        setFlowProgress(0);
-        setTrainStatus(null);
-      }, 2500);
-    } finally {
-      setTraining(false);
-    }
-  };
-
   // ── Build combined chart data (history + forecast) ──
   const chartData = React.useMemo(() => {
     if (!data) return [];
@@ -485,23 +360,6 @@ export default function Dashboard() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2.5">
-          <div className="hidden sm:block">
-            <ProgressFlowState state={flowState} progress={flowProgress} />
-          </div>
-          {trainStatus && (
-            <span className="mono rounded-full px-3 py-1 text-[9px] uppercase tracking-[0.08em]"
-              style={{ color: C.info, background: C.infoSoft, border: `1px solid ${C.line}` }}>
-              {trainStatus}
-            </span>
-          )}
-          <button
-            onClick={trainModel}
-            disabled={training}
-            className="mono rounded-full px-4 py-1.5 text-[10px] uppercase tracking-[0.1em] transition-opacity disabled:opacity-50"
-            style={{ background: C.ink, color: C.bg }}
-          >
-            {training ? "Training…" : `Train ${activeTicker}`}
-          </button>
           <button
             onClick={() => fetchPrediction(activeTicker)}
             className="mono flex items-center gap-1.5 rounded-full border px-4 py-1.5 text-[10px] uppercase tracking-[0.1em] transition-colors hover:bg-white"
@@ -553,7 +411,7 @@ export default function Dashboard() {
           <div className="flex items-center gap-3 rounded-xl px-4 py-3 text-[13px]"
             style={{ background: C.dangerSoft, border: `1px solid #EBD2CD`, color: C.danger }}>
             <AlertTriangle size={15} />
-            {error} — Model may not be trained yet. Click Train {activeTicker} above.
+            {error} — model artifacts are pre-trained offline; check the ticker and try Refresh.
           </div>
         )}
 
@@ -895,6 +753,8 @@ export default function Dashboard() {
             <StockBriefingPanel ticker={activeTicker} />
           </>
         )}
+
+        <AgentOpsPanel />
 
         {loading && !data && (
           <div className="space-y-5 py-2">

@@ -159,10 +159,10 @@ function Reveal({
 const STEPS = [
   {
     num: "01",
-    tag: "Model training",
-    prefix: "curl -X POST localhost:8000",
-    cmd: "/api/train/AAPL",
-    desc: "Train your first LSTM + XGBoost ensemble on two years of daily AAPL data. Artefacts are versioned by timestamp and aliased as latest.",
+    tag: "Predictions",
+    prefix: "curl localhost:8000",
+    cmd: "/api/predict/AAPL",
+    desc: "Run the pre-trained LSTM + XGBoost ensemble against daily AAPL data. Artefacts are versioned by timestamp and aliased as latest.",
   },
   {
     num: "02",
@@ -183,7 +183,7 @@ const STEPS = [
     tag: "Auto-deploy",
     prefix: "github secrets →",
     cmd: "AWS_ACCESS_KEY_ID  ·  AWS_SECRET_ACCESS_KEY\nAMPLIFY_APP_ID  ·  APP_RUNNER_SERVICE_ARN",
-    desc: "Add four repository secrets. Every merge to main deploys the frontend to AWS Amplify and the backend image to ECR, then App Runner.",
+    desc: "Add four repository secrets. Every merge to master deploys the backend image to ECR, then App Runner; the frontend deploys from Vercel's Git integration.",
   },
 ];
 
@@ -202,7 +202,7 @@ const STATS = [
   { label: "Cache TTL", value: "15 / 5 min" },
   { label: "API routes", value: "12 endpoints" },
   { label: "Data window", value: "2yr daily" },
-  { label: "Deploy", value: "Amplify + App Runner" },
+  { label: "Deploy", value: "Vercel + App Runner" },
 ];
 
 // ─── Landing Page ─────────────────────────────────────────────────────────────

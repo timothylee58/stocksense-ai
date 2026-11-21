@@ -28,9 +28,6 @@ export const api = {
       `/api/sentiment/${ticker}?hours=${hours}`
     ),
 
-  trainTicker: (ticker: string) =>
-    apiFetch<{ status: string }>(`/api/train/${ticker}`, { method: "POST" }),
-
   watchlist: {
     list: () => apiFetch<{ watchlist: string[] }>("/api/watchlist"),
     add: (ticker: string) =>

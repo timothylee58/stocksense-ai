@@ -1,7 +1,10 @@
+from datetime import datetime, timedelta, timezone
+
 from app.schemas.risk import (
     KillSwitchState,
     OrderIntent,
     OrderSide,
+    OrderType,
     PortfolioPosition,
     PortfolioSnapshot,
     RiskLimits,
@@ -112,3 +115,81 @@ def test_sell_more_than_held_is_rejected():
 
 def test_ticker_is_normalised():
     assert _intent(ticker=" aapl ").ticker == "AAPL"
+
+
+def test_market_order_is_forbidden_by_default():
+    decision = evaluate_order("d1", _intent(order_type=OrderType.MARKET), _portfolio(), RiskLimits())
+    assert not decision.approved
+    assert "MARKET_ORDER_FORBIDDEN" in _codes(decision)
+
+
+def test_limit_order_passes_order_type_check():
+    decision = evaluate_order("d1", _intent(order_type=OrderType.LIMIT), _portfolio(), RiskLimits())
+    assert "MARKET_ORDER_FORBIDDEN" not in _codes(decision)
+
+
+def test_missing_quote_timestamp_blocks_buy():
+    now = datetime.now(timezone.utc)
+    decision = evaluate_order(
+        "d1", _intent(), _portfolio(), RiskLimits(max_quote_age_s=60), now=now
+    )
+    assert not decision.approved
+    assert "QUOTE_TIMESTAMP_MISSING" in _codes(decision)
+
+
+def test_stale_quote_blocks_buy():
+    now = datetime.now(timezone.utc)
+    decision = evaluate_order(
+        "d1",
+        _intent(quote_ts=now - timedelta(seconds=90)),
+        _portfolio(),
+        RiskLimits(max_quote_age_s=60),
+        now=now,
+    )
+    assert not decision.approved
+    assert "STALE_QUOTE" in _codes(decision)
+
+
+def test_fresh_quote_allows_buy():
+    now = datetime.now(timezone.utc)
+    decision = evaluate_order(
+        "d1",
+        _intent(quote_ts=now - timedelta(seconds=5)),
+        _portfolio(),
+        RiskLimits(max_quote_age_s=60),
+        now=now,
+    )
+    assert decision.approved
+
+
+def test_quote_freshness_not_required_when_disabled():
+    decision = evaluate_order("d1", _intent(), _portfolio(), RiskLimits(max_quote_age_s=None))
+    assert decision.approved
+
+
+def test_sells_do_not_require_quote_freshness():
+    now = datetime.now(timezone.utc)
+    held = _portfolio(
+        cash=0.0,
+        positions=[PortfolioPosition(ticker="AAPL", quantity=10, market_value=1_000.0)],
+    )
+    decision = evaluate_order(
+        "d1",
+        _intent(side=OrderSide.SELL, quantity=5),
+        held,
+        RiskLimits(max_quote_age_s=60),
+        now=now,
+    )
+    assert "QUOTE_TIMESTAMP_MISSING" not in _codes(decision)
+    assert decision.approved
+
+
+def test_non_us_ticker_is_outside_universe():
+    decision = evaluate_order("d1", _intent(ticker="MAYBANK.KL"), _portfolio(), RiskLimits())
+    assert not decision.approved
+    assert "UNIVERSE_NOT_TRADABLE" in _codes(decision)
+
+
+def test_us_ticker_passes_universe_check():
+    decision = evaluate_order("d1", _intent(ticker="NVDA"), _portfolio(), RiskLimits())
+    assert "UNIVERSE_NOT_TRADABLE" not in _codes(decision)

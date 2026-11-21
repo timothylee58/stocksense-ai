@@ -1,3 +1,4 @@
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
 from fastapi import FastAPI
@@ -59,6 +60,7 @@ def _order(**overrides):
         "dry_run": False,
         "idempotency_key": "order-1",
         "strategy_id": "test",
+        "quote_ts": datetime.now(timezone.utc).isoformat(),
     }
     base.update(overrides)
     return base
@@ -123,3 +125,46 @@ def test_dry_run_never_executes(monkeypatch, tmp_path):
     assert payload["decision"]["approved"] is True
     assert payload["execution"]["status"] == "dry_run"
     assert paper_broker.get_portfolio().cash == 100_000.0
+
+
+def test_market_order_is_rejected(monkeypatch, tmp_path):
+    client = _client(monkeypatch, tmp_path)
+    payload = client.post(
+        "/api/trading/orders",
+        json=_order(order_type="MARKET"),
+    ).json()
+    assert payload["decision"]["approved"] is False
+    assert "MARKET_ORDER_FORBIDDEN" in payload["decision"]["reason_codes"]
+    assert payload["execution"] is None
+
+
+def test_buy_without_quote_timestamp_is_rejected(monkeypatch, tmp_path):
+    client = _client(monkeypatch, tmp_path)
+    payload = client.post(
+        "/api/trading/orders",
+        json=_order(quote_ts=None),
+    ).json()
+    assert payload["decision"]["approved"] is False
+    assert "QUOTE_TIMESTAMP_MISSING" in payload["decision"]["reason_codes"]
+
+
+def test_buy_on_stale_quote_is_rejected(monkeypatch, tmp_path):
+    client = _client(monkeypatch, tmp_path)
+    stale = (datetime.now(timezone.utc) - timedelta(minutes=10)).isoformat()
+    payload = client.post(
+        "/api/trading/orders",
+        json=_order(quote_ts=stale),
+    ).json()
+    assert payload["decision"]["approved"] is False
+    assert "STALE_QUOTE" in payload["decision"]["reason_codes"]
+
+
+def test_sell_is_not_blocked_by_missing_quote_timestamp(monkeypatch, tmp_path):
+    client = _client(monkeypatch, tmp_path)
+    client.post("/api/trading/orders", json=_order(idempotency_key="seed-sell"))
+    payload = client.post(
+        "/api/trading/orders",
+        json=_order(side="SELL", quantity=5, idempotency_key="exit", quote_ts=None),
+    ).json()
+    assert payload["decision"]["approved"] is True
+    assert "QUOTE_TIMESTAMP_MISSING" not in payload["decision"]["reason_codes"]

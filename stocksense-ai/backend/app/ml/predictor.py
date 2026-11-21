@@ -313,7 +313,7 @@ async def run_prediction(ticker: str) -> dict:
     signal_votes[lstm_signal] += 0.60 * lstm_conf
     signal_votes[xgb_signal]  += 0.40 * xgb_conf
     final_signal: Signal = max(signal_votes, key=signal_votes.__getitem__)
-    confidence = round(min(0.99, signal_votes[final_signal] + 0.1), 3)
+    confidence = round(max(0.0, min(0.99, signal_votes[final_signal] + 0.1)), 3)
 
     # ── Targets ──
     pt7  = round(forecast_prices[6],  2) if len(forecast_prices) >= 7  else current_price

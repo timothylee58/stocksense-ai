@@ -10,7 +10,8 @@ from app.core.rate_limit import RateLimitMiddleware
 from app.api.router import api_router
 
 settings = get_settings()
-os.makedirs(settings.models_dir, exist_ok=True)
+if not settings.read_only_mode:
+    os.makedirs(settings.models_dir, exist_ok=True)
 
 logger = logging.getLogger(__name__)
 scheduler = AsyncIOScheduler(timezone="Asia/Kuala_Lumpur")
@@ -18,13 +19,14 @@ scheduler = AsyncIOScheduler(timezone="Asia/Kuala_Lumpur")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    try:
-        from app.services.scheduler_service import run_daily_ingestion
-        scheduler.add_job(run_daily_ingestion, "cron", hour=9, minute=0)
-        scheduler.start()
-        logger.info("APScheduler started — daily ingestion at 9AM MYT")
-    except Exception as e:
-        logger.warning("Scheduler init failed (non-fatal): %s", e)
+    if not settings.read_only_mode:
+        try:
+            from app.services.scheduler_service import run_daily_ingestion
+            scheduler.add_job(run_daily_ingestion, "cron", hour=9, minute=0)
+            scheduler.start()
+            logger.info("APScheduler started — daily ingestion at 9AM MYT")
+        except Exception as e:
+            logger.warning("Scheduler init failed (non-fatal): %s", e)
     yield
     if scheduler.running:
         scheduler.shutdown()

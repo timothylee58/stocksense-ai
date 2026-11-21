@@ -100,6 +100,19 @@ def get_security_code(ticker: str, market: str = "US") -> str:
     return symbol
 
 
+def get_yfinance_symbol(ticker: str, market: str = "US") -> str:
+    """Yahoo Finance symbol for a ticker (KLSE → .KL, SGX → .SI)."""
+    symbol = ticker.upper()
+    if "." in symbol:
+        symbol = symbol.split(".", 1)[1]
+    market = market.upper()
+    if market == "MY":
+        return f"{MY_KLSE_CODES.get(symbol, symbol)}.KL"
+    if market == "SG":
+        return f"{SGX_CODES.get(symbol, symbol)}.SI"
+    return symbol
+
+
 # Sub-cent values are corrupt feed artifacts, not quotes (e.g. yfinance resolving
 # the MY ticker "DIGI" to a $0.0001 OTC shell).
 MIN_VALID_PRICE = 0.01

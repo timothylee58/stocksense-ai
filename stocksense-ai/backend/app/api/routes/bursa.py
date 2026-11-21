@@ -109,7 +109,7 @@ async def _yf_quote_my(full_code: str) -> dict | None:
 
 
 async def _fetch_quote(full_code: str) -> dict:
-    """Fetch real-time quote: moomoo → yfinance → demo stub."""
+    """Fetch MY quote: yfinance .KL (delayed) → moomoo → demo stub."""
     if settings.demo_mode:
         meta = MY_STOCKS.get(full_code, {})
         return get_demo_quote(full_code, meta)
@@ -117,12 +117,17 @@ async def _fetch_quote(full_code: str) -> dict:
     ticker, market = _parse_code(full_code)
     meta = MY_STOCKS.get(full_code, {})
 
-    try:
-        q = await fetch_realtime_quote(ticker, market)
-        raw = q if valid_price(q.get("last_price")) else (await _yf_quote_my(full_code)) or q
-    except Exception as exc:
-        logger.warning("moomoo fetch failed for %s: %s", full_code, exc)
-        raw = (await _yf_quote_my(full_code)) or {"last_price": 0.0, "source": "error"}
+    # moomoo offers no free MY quote path — snapshot and K-line both require the
+    # paid "MY Security MarketStocks" entitlement, and the desktop basic/delayed
+    # tier is not exposed to OpenD. Delayed Yahoo .KL data is the default; moomoo
+    # stays as the upgrade path once a subscription exists.
+    raw = await _yf_quote_my(full_code)
+    if not raw:
+        try:
+            raw = await fetch_realtime_quote(ticker, market)
+        except Exception as exc:
+            logger.warning("moomoo fetch failed for %s: %s", full_code, exc)
+            raw = {"last_price": 0.0, "source": "error"}
 
     lp = valid_price(raw.get("last_price"))
     pc = valid_price(raw.get("prev_close_price"))

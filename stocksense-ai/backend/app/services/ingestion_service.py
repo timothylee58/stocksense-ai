@@ -20,6 +20,8 @@ def _sentiment_label(score: float) -> str:
 
 async def ingest_ticker(ticker: str) -> None:
     """Ingest one ticker: fetch data, run anomaly detection, score sentiment, persist."""
+    if settings.read_only_mode:
+        return
     logger.info("Ingesting %s...", ticker)
     try:
         from app.data.fetcher import fetch_stock_data
@@ -67,6 +69,8 @@ async def ingest_ticker(ticker: str) -> None:
 
 async def run_daily_ingestion() -> None:
     """Ingest all configured tickers. Called by APScheduler at 9AM MYT."""
+    if settings.read_only_mode:
+        return
     logger.info("Daily ingestion started for %s", settings.default_tickers)
     for ticker in settings.default_tickers:
         await ingest_ticker(ticker)

@@ -22,6 +22,8 @@ def get_supabase_client():
 
 
 async def insert_prediction(record: dict) -> None:
+    if get_settings().read_only_mode:
+        return
     client = get_supabase_client()
     if client is None:
         return
@@ -32,6 +34,8 @@ async def insert_prediction(record: dict) -> None:
 
 
 async def insert_anomaly(record: dict) -> None:
+    if get_settings().read_only_mode:
+        return
     client = get_supabase_client()
     if client is None:
         return
@@ -42,6 +46,8 @@ async def insert_anomaly(record: dict) -> None:
 
 
 async def insert_sentiment(record: dict) -> None:
+    if get_settings().read_only_mode:
+        return
     client = get_supabase_client()
     if client is None:
         return

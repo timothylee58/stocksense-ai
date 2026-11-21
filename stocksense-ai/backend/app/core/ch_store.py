@@ -14,6 +14,7 @@ from typing import Optional
 import pandas as pd
 
 from app.core.clickhouse_client import get_ch_client
+from app.core.config import get_settings
 
 logger = logging.getLogger(__name__)
 
@@ -112,6 +113,8 @@ def ch_write_ohlcv(ticker: str, df: pd.DataFrame) -> None:
     Persist a DataFrame (as returned by fetch_stock_data) to ClickHouse.
     Silently ignores errors — Redis / yfinance remain the source of truth.
     """
+    if get_settings().read_only_mode:
+        return
     client = get_ch_client()
     if client is None or df.empty:
         return
@@ -187,6 +190,8 @@ def ch_write_sentiment(ticker: str, records: list[dict]) -> None:
         sentiment:    str       (positive | neutral | negative)
         score:        float     (signed: positive_prob - negative_prob)
     """
+    if get_settings().read_only_mode:
+        return
     client = get_ch_client()
     if client is None or not records:
         return
@@ -232,6 +237,8 @@ def ch_write_backtest(ticker: str, result: dict) -> None:
     Persist backtest metrics from run_backtest() to ClickHouse for
     historical tracking and cross-ticker comparison.
     """
+    if get_settings().read_only_mode:
+        return
     client = get_ch_client()
     if client is None:
         return

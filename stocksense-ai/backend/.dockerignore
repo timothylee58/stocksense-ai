@@ -1,0 +1,16 @@
+.venv
+venv
+__pycache__/
+**/__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.env
+.env.*
+**/.env
+**/.env.*
+data/cache/
+*.bak
+*.log
+.git/
+# tests/ is required by the isolated Docker test stage, not copied into serving.

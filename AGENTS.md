@@ -14,7 +14,7 @@ stocksense-ai/               ← repo root
     ├── backend/             ← CANONICAL FastAPI backend (use this one)
     │   ├── app/
     │   │   ├── main.py
-    │   │   ├── api/routes/  ← predict.py, train.py, stocks.py, websocket.py
+    │   │   ├── api/routes/  ← predict.py, stocks.py, websocket.py
     │   │   ├── core/        ← config.py, redis_client.py, stocks.py
     │   │   ├── data/        ← fetcher.py (yfinance + moomoo fallback), moomoo_fetcher.py
     │   │   └── ml/          ← predictor.py (ensemble), models/lstm.py, models/xgb_model.py
@@ -46,8 +46,9 @@ python -m uvicorn app.main:app --reload --port 8000
 # Run a single test (no test suite yet — use curl for smoke tests)
 curl http://localhost:8000/health
 curl http://localhost:8000/api/predict/AAPL
-curl -X POST http://localhost:8000/api/train/AAPL
-curl http://localhost:8000/api/train/status/AAPL
+
+# Training is offline only (no runtime retraining endpoint)
+python -m scripts.train_model --ticker AAPL
 ```
 
 ### Frontend (Next.js)
@@ -72,7 +73,7 @@ npx next lint
 4. `predict_xgb()` → XGBoost classifier (BUY/SELL/HOLD), loaded from `./models/{ticker}_xgb_latest.json`
 5. Ensemble: 60% LSTM direction + 40% XGBoost signal → `PredictionResult` dataclass → serialised to JSON
 
-Training is triggered via `POST /api/train/{ticker}` and runs LSTM + XGBoost in parallel background tasks. Models are saved with versioned timestamps and aliased as `*_latest.*`.
+Models are pre-trained artefacts: `python -m scripts.train_model --ticker {TICKER}` runs offline and writes versioned artefacts aliased as `*_latest.*`. The API never retrains — there is no training endpoint.
 
 ### Data Sources
 
@@ -95,13 +96,20 @@ Training is triggered via `POST /api/train/{ticker}` and runs LSTM + XGBoost in 
 |---|---|---|
 | GET | `/api/predict/{ticker}` | Ensemble ML prediction |
 | GET | `/api/predict/batch/{tickers}` | Comma-separated, max 10 |
-| POST | `/api/train/{ticker}` | Kick off background training |
-| POST | `/api/train/all/batch` | Train all 15 stocks |
-| GET | `/api/train/status/{ticker}` | Poll training progress |
 | GET | `/api/stocks/{ticker}/realtime` | moomoo real-time quote |
 | GET | `/api/stocks/{ticker}/ticks` | Tick-by-tick trades |
 | GET | `/api/stocks/{ticker}/orderbook` | Level 2 depth |
 | WS | `/ws/ticker/{ticker}` | Live price stream (60s / 300s off-hours) |
+| GET | `/api/agents` | Seven agent templates + tool allowlist + manifest SHA-256 |
+| GET | `/api/agents/policy` | Deny prefixes and per-agent allowlists |
+| POST | `/api/agents/check-tool` | Allow/deny one moomoo tool before it is called |
+| POST | `/api/agents/run` | Run one shadow/paper session (requires `X-Admin-Token`) |
+| GET | `/api/agents/runs` | Recent sessions from the hash-chained journal |
+| GET | `/api/agents/runs/{run_id}` | Full event stream for one run |
+| GET | `/api/agents/journal/verify` | Verify the journal hash chain |
+| GET | `/api/agents/reconciliation` | Ledger executions vs broker paper orders |
+
+Agent runs are paper/SIMULATE only. `python -m app.agents.shadow --sessions N [--phase paper] [--symbols AAPL,NVDA]` drives the same loop from the CLI. The dashboard shows runs, journal integrity, and reconciliation in the "Agent operations" panel.
 
 ### Frontend
 
@@ -119,6 +127,14 @@ SECRET_KEY=<openssl rand -hex 32>
 MOOMOO_HOST=127.0.0.1
 MOOMOO_PORT=11111
 MOOMOO_ENABLED=true
+ADMIN_API_TOKEN=<protects POST /api/agents/run>
+DEMO_MODE=false              # true = in-process demo broker, never calls moomoo
+CHALLENGE_UNIVERSE=["AAPL","NVDA"]
+CHALLENGE_STRATEGY_VERSION=s1.0
+CHALLENGE_SIGNAL_THRESHOLD=0.60
+RISK_PER_TRADE_PCT=0.005
+RISK_MAX_OPEN_POSITIONS=5
+AGENT_JOURNAL_JSONL=data/agent_journal.jsonl
 ```
 
 Frontend reads from `stocksense-ai/frontend/.env.local`:

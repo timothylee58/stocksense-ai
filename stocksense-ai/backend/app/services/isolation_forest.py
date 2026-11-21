@@ -52,17 +52,20 @@ def predict_anomalies(df: pd.DataFrame, ticker: str) -> pd.DataFrame:
     """
     Runs Isolation Forest inference on df.
     Returns df with added columns: anomaly_score, is_anomaly.
-    Trains model if none exists.
+    Missing artefacts yield a neutral result — inference never trains.
     """
     mp = _model_path(ticker)
     sp = _scaler_path(ticker)
 
-    if os.path.exists(mp) and os.path.exists(sp):
-        model = joblib.load(mp)
-        scaler = joblib.load(sp)
-    else:
-        logger.info("No Isolation Forest model for %s — training now", ticker)
-        model, scaler = train_isolation_forest(df, ticker)
+    if not (os.path.exists(mp) and os.path.exists(sp)):
+        logger.warning("No Isolation Forest artefact for %s — returning neutral anomaly output", ticker)
+        result = df.copy()
+        result["anomaly_score"] = 0.0
+        result["is_anomaly"] = False
+        return result
+
+    model = joblib.load(mp)
+    scaler = joblib.load(sp)
 
     X = build_anomaly_matrix(df)
     available_idx = X.index

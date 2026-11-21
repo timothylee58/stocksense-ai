@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 from dotenv import load_dotenv
-from app.api.routes import predict, train, watchlist, ws, auth, metrics, health, stocks
+from app.api.routes import predict, watchlist, ws, auth, metrics, health, stocks
 from app.core.middleware import log_requests
 from app.db.models import init_tables
 
@@ -39,7 +39,6 @@ def read_root():
     return {"status": "StockSense AI API is running"}
 
 app.include_router(predict.router, prefix="/api")
-app.include_router(train.router, prefix="/api")
 app.include_router(stocks.router, prefix="/api")
 app.include_router(watchlist.router, prefix="/api")
 app.include_router(ws.router)

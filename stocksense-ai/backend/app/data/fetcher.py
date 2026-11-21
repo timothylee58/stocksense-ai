@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 from datetime import datetime, timedelta
 
 import numpy as np
@@ -32,6 +33,7 @@ except ImportError:
 from app.core.config import get_settings
 from app.core.redis_client import cache_get, cache_set
 from app.core.ch_store import ch_read_ohlcv, ch_write_ohlcv, ch_is_fresh
+from app.data.local_kline_cache import read_cached_klines
 
 logger = logging.getLogger(__name__)
 
@@ -167,12 +169,35 @@ def add_indicators(df: pd.DataFrame) -> pd.DataFrame:
 
 # ── main fetcher ──────────────────────────────────────────────────────────────
 
+_TRUTHY = {"1", "true", "yes", "on"}
+
+
+def _cache_first_enabled() -> bool:
+    return os.getenv("MOOMOO_KLINE_CACHE_FIRST", "").strip().lower() in _TRUTHY
+
+
+async def _load_cached_dataset(ticker: str, cache_key: str) -> pd.DataFrame | None:
+    """Serve OHLCV + indicators from the local moomoo snapshot, if fresh."""
+    cached_df = read_cached_klines(ticker.upper())
+    if cached_df is None or len(cached_df) < 60:
+        return None
+
+    logger.debug("Local K-line cache hit for %s (%s)", ticker, cached_df.attrs.get("source"))
+    df = add_indicators(cached_df)
+    serialisable = df.copy()
+    serialisable.index = serialisable.index.strftime("%Y-%m-%d")
+    await cache_set(cache_key, serialisable.to_dict(), settings.cache_dataset_ttl)
+    return df
+
+
 async def fetch_stock_data(ticker: str, period_years: int = 2) -> pd.DataFrame:
     """
     Returns a DataFrame with OHLCV + technical indicators.
     Cached in Redis for 15 minutes (raw JSON, then re-parsed).
 
-    Tries moomoo API first (if enabled), falls back to yfinance.
+    Tries moomoo API first (if enabled), then the local K-line snapshot,
+    then yfinance. Set MOOMOO_KLINE_CACHE_FIRST=1 to prefer the snapshot
+    over the live OpenD path.
     """
     cache_key = f"dataset:{ticker.upper()}:{period_years}y"
     cached = await cache_get(cache_key)
@@ -192,6 +217,11 @@ async def fetch_stock_data(ticker: str, period_years: int = 2) -> pd.DataFrame:
             await cache_set(cache_key, serialisable.to_dict(), settings.cache_dataset_ttl)
             return ch_df
 
+    if _cache_first_enabled():
+        df = await _load_cached_dataset(ticker, cache_key)
+        if df is not None:
+            return df
+
     # Try moomoo first for historical K-line data
     if _HAS_MOOMOO_IMPORT and MoomooClient and MoomooClient.is_connected():
         try:
@@ -206,6 +236,13 @@ async def fetch_stock_data(ticker: str, period_years: int = 2) -> pd.DataFrame:
                     return df
         except Exception as e:
             logger.warning("moomoo historical fetch failed for %s, falling back to yfinance: %s", ticker, e)
+
+    # ── Local moomoo K-line snapshot ──────────────────────────────────────────
+    # Populated by scripts/cache_moomoo_klines.py (OpenD pull or imported MCP
+    # quote_cur_kline output). Stale files are ignored via fetched_at.
+    df = await _load_cached_dataset(ticker, cache_key)
+    if df is not None:
+        return df
 
     # Fallback to yfinance
     end = datetime.today()

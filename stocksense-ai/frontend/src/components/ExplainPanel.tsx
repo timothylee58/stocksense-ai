@@ -10,7 +10,6 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
 interface ShapFeature {
   feature: string;
-  value: number;
   contribution: number;
 }
 
@@ -159,7 +158,7 @@ export default function ExplainPanel({ ticker }: { ticker: string }) {
                   animate={{ opacity: 1, x: 0 }}
                   transition={{ delay: i * 0.04 }}
                   className="grid gap-2"
-                  style={{ gridTemplateColumns: "140px 1fr 56px 48px", alignItems: "center" }}
+                  style={{ gridTemplateColumns: "140px 1fr 56px", alignItems: "center" }}
                 >
                   <span className="mono truncate" style={{ fontSize: 10, color: "#6E7075" }} title={prettyName(f.feature)}>
                     {prettyName(f.feature)}
@@ -167,9 +166,6 @@ export default function ExplainPanel({ ticker }: { ticker: string }) {
                   <ContributionBar value={f.contribution} max={maxContrib} />
                   <span className="mono text-right" style={{ fontSize: 10, color: f.contribution >= 0 ? "#1F5E46" : "#A33A31" }}>
                     {f.contribution >= 0 ? "+" : ""}{f.contribution.toFixed(3)}
-                  </span>
-                  <span className="mono text-right" style={{ fontSize: 10, color: "#9C978D" }}>
-                    {Number.isInteger(f.value) ? f.value : f.value.toFixed(2)}
                   </span>
                 </motion.div>
               ))}

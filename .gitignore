@@ -24,6 +24,8 @@ mlruns/
 mlflow.db
 stocksense.db
 **/data/decision_ledger.jsonl
+**/data/agent_journal.jsonl
+**/data/cache/
 
 # Node
 **/node_modules/

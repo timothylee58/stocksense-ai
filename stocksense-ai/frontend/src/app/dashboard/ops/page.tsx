@@ -16,6 +16,8 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 type Summary = {
   demo: boolean;
   generated_at: string;
+  stale?: boolean;
+  stale_reason?: { code: string; message: string };
   account: {
     verified?: boolean;
     source?: string;
@@ -36,6 +38,7 @@ type Summary = {
     position_count: number;
     kill_switch_active: boolean;
     snapshot_storage: string;
+    captured_at?: string | null;
   };
   positions: Array<{
     ticker: string;
@@ -281,6 +284,22 @@ export default function OpsPage() {
           </div>
         )}
 
+        {summary?.stale && (
+          <div className="card px-4 py-3 flex items-start gap-3" style={{ borderColor: `${AMBER}55`, background: `${AMBER}0d` }}>
+            <ShieldAlert size={16} style={{ color: AMBER, flexShrink: 0, marginTop: 2 }} />
+            <div>
+              <div className="mono text-xs" style={{ color: AMBER }}>READ-ONLY DEMO · LIVE BROKER OFFLINE</div>
+              <div className="mono text-[11px] mt-1" style={{ color: "#3C3E44" }}>
+                Showing the last recorded snapshot
+                {summary.summary.captured_at
+                  ? ` (${new Date(summary.summary.captured_at).toLocaleString("en-GB")})`
+                  : ""}
+                . Orders and agent sessions run on the local paper stack, not this deployment.
+              </div>
+            </div>
+          </div>
+        )}
+
         <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
           <MetricCard label="EQUITY" value={s ? money(s.equity) : "—"} sub="account value"
             color="#17191E" icon={<Wallet size={14} />} />
@@ -340,7 +359,9 @@ export default function OpsPage() {
               <span className="mono text-[10px]" style={{ color: "#6E7075" }}>{summary?.positions.length ?? 0}</span>
             </div>
             {!summary || summary.positions.length === 0 ? (
-              <div className="mono text-xs py-8 text-center" style={{ color: "#6E7075" }}>Flat — no open positions.</div>
+              <div className="mono text-xs py-8 text-center" style={{ color: "#6E7075" }}>
+                {summary?.stale ? "Positions unavailable — broker offline." : "Flat — no open positions."}
+              </div>
             ) : (
               <table className="w-full mono text-[11px]">
                 <thead>

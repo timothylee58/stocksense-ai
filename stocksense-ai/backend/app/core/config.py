@@ -16,6 +16,10 @@ class Settings(BaseSettings):
     # Demo / offline mode — no paid accounts needed, serves synthetic KLSE data
     demo_mode: bool = False
 
+    # Read-only deployment (READ_ONLY_MODE): public demo serving predictions +
+    # ledger display. Write paths (orders, kill switch, agent runs) are refused.
+    read_only_mode: bool = False
+
     # Moomoo API (real-time quotes + tick data)
     moomoo_host: str = "127.0.0.1"
     moomoo_port: int = 11111
@@ -35,6 +39,22 @@ class Settings(BaseSettings):
     risk_max_daily_loss_pct: float = 0.03
     risk_max_drawdown_pct: float = 0.15
     risk_min_cash_buffer_pct: float = 0.10
+    risk_limit_orders_only: bool = True
+    risk_max_quote_age_s: int = 60  # 0 disables the freshness check
+    risk_us_only: bool = True
+    risk_max_open_positions: int = 5
+    # PRD v0.2: 0.5 % of equity risked per trade (stop-distance sizing).
+    risk_per_trade_pct: float = 0.005
+
+    # Challenge agent run loop (paper/SIMULATE only)
+    challenge_universe: list[str] = [
+        "NVDA", "AAPL", "MSFT", "AMD", "GOOGL", "META", "AMZN", "TSLA",
+    ]
+    challenge_strategy_version: str = "s1.1"
+    # 0.30: the 3-class XGB confidence (empirically <= ~0.52) plus LSTM caps the
+    # achievable net near 0.42, so the original 0.60 gate never traded.
+    challenge_signal_threshold: float = 0.30
+    agent_journal_jsonl: str = "data/agent_journal.jsonl"
 
     # Decision ledger + equity history
     decision_ledger_jsonl: str = "data/decision_ledger.jsonl"
@@ -90,7 +110,7 @@ class Settings(BaseSettings):
         "http://localhost:8081",  # Expo dev server / web
         "http://localhost:8888",  # Next.js dev server
         "http://127.0.0.1:8888",
-        "https://main.your-app-id.amplifyapp.com",
+        "https://your-app.vercel.app",
     ]
 
     class Config:

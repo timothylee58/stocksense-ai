@@ -252,6 +252,8 @@ def place_paper_order(intent: OrderIntent) -> OrderExecution:
 
     side = sdk.TrdSide.BUY if intent.side == OrderSide.BUY else sdk.TrdSide.SELL
     order_type = sdk.OrderType.MARKET if intent.order_type == OrderType.MARKET else sdk.OrderType.NORMAL
+    # remark doubles as the ledger↔broker reconciliation tag; keep it short.
+    tag = (intent.idempotency_key or intent.strategy_id or "manual").strip()
     data = _call(
         _get_ctx().place_order,
         price=float(intent.price),
@@ -261,7 +263,7 @@ def place_paper_order(intent: OrderIntent) -> OrderExecution:
         order_type=order_type,
         trd_env=sdk.TrdEnv.SIMULATE,
         acc_id=acc_id,
-        remark=f"stocksense:{intent.strategy_id}"[:64],
+        remark=f"stocksense:{tag}"[:64],
     )
     row = data.iloc[0] if hasattr(data, "iloc") else data[0]
     order_id = str(_first(row, ("order_id", "orderid"), ""))
@@ -272,3 +274,41 @@ def place_paper_order(intent: OrderIntent) -> OrderExecution:
         message=f"paper order accepted by {s.moomoo_trd_env}",
         dry_run=False,
     )
+
+
+def list_paper_orders(limit: int = 200) -> list[dict]:
+    """Read-only SIMULATE order list for ledger↔broker reconciliation."""
+    sdk = _sdk()
+    acc_id = _acc_id()
+    verify_paper_guard()
+
+    query = getattr(_get_ctx(), "history_order_list_query", None)
+    try:
+        if query is None:
+            raise BrokerUnavailable("BROKER_CALL_FAILED", "history_order_list_query unavailable")
+        # Signatures differ between SDK versions; this one takes neither
+        # status_filter nor refresh_cache on history_order_list_query.
+        data = _call(query, trd_env=sdk.TrdEnv.SIMULATE, acc_id=acc_id)
+    except Exception as exc:
+        logger.warning("history_order_list_query failed: %s", exc)
+        data = _call(
+            _get_ctx().order_list_query,
+            trd_env=sdk.TrdEnv.SIMULATE,
+            acc_id=acc_id,
+            refresh_cache=True,
+        )
+
+    rows = data.to_dict("records") if hasattr(data, "to_dict") else list(data or [])
+    orders: list[dict] = []
+    for row in rows:
+        orders.append({
+            "order_id": str(_first(row, ("order_id", "orderid"), "")),
+            "ticker": _normalise_ticker(_first(row, ("code", "stock_code"), "")),
+            "side": str(_first(row, ("trd_side", "side"), "")),
+            "quantity": _as_float(_first(row, ("qty", "quantity"), 0.0)),
+            "price": _as_float(_first(row, ("price", "order_price"), 0.0)),
+            "status": str(_first(row, ("order_status", "status"), "")),
+            "remark": str(_first(row, ("remark", "text"), "")),
+            "ts": str(_first(row, ("update_time", "create_time"), "")),
+        })
+    return orders[-max(1, int(limit)):]
