@@ -1,215 +1,295 @@
 # StockSense AI
 
-> ML-powered stock anomaly detection + directional prediction — full ML lifecycle portfolio project
+> A seven-role AI trading agent for the **Moomoo × Qoder AI Trading Agent Challenge** — paper/SIMULATE only, with an executable pre-trade risk gate, a hash-chained audit journal, and decision-to-broker reconciliation.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.11+-blue.svg)](https://python.org)
-[![Next.js](https://img.shields.io/badge/Next.js-15-black.svg)](https://nextjs.org)
+[![Next.js](https://img.shields.io/badge/Next.js-16-black.svg)](https://nextjs.org)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115-009688.svg)](https://fastapi.tiangolo.com)
+
+**Paper window:** 2026-11-19 → 2026-11-30 (submission deadline) · **Strategy:** `s1.1` · **Evidence through:** 2026-11-20
+
+> **Safety.** Every order this repository can produce is a LIMIT order against a moomoo **SIMULATE** paper account. There is no code path to a live account: the environment guard rejects any `trd_env != SIMULATE` before the SDK is called, and the allowlist denies the `trading_*`, `crypto_*`, `grid_*` and live `account_*` namespaces before anything reaches a broker or MCP server.
 
 ---
 
 ## What It Does
 
-StockSense AI ingests OHLCV data + financial news daily, runs a 3-stage ML pipeline to detect unusual market behaviour and predict next-day direction, then streams results to a real-time dashboard. Covers NASDAQ (NVDA, AAPL, MSFT…) and Bursa Malaysia (MAYBANK.KL, PBBANK.KL).
+StockSense AI turns a directional ML ensemble into a **gated, auditable paper-trading decision**:
+
+```
+moomoo market data (OpenD, or the local K-line snapshot)
+  → 60 s freshness check → XGBoost + FinBERT + LSTM ensemble
+  → position sizing (0.5 % equity risk, ATR stop)
+  → deterministic risk gate  ──reject──▶ decision ledger (reason code)
+  → decision ledger (append-only, before the broker call)
+  → SIMULATE order tagged with the decision id
+  → hash-chained journal → broker reconciliation → ops dashboard
+```
+
+Every tool call passes the allowlist in `app/agents/policy.py` first; the
+runtime then executes it through an in-process binding layer
+(`app/agents/bindings.py`) over the existing data layer and paper broker. The
+104-tool moomoo MCP inventory is the reference the allowlist is compiled
+against, so the same names can be bound to a hosted MCP session unchanged.
+
+The submission is built for inspection: every accepted, rejected, dry-run, duplicate and failed decision is recorded, and the broker order list is reconciled back to the ledger.
 
 ---
 
-## ML Pipeline
+## Why This Submission Is Auditable
 
-```
-Stage 1 — Isolation Forest (unsupervised)
-  yfinance OHLCV + 25 technical features
-    → anomaly_score [-1, 1]
-    → is_anomaly (bool)
+| Guarantee | Implementation |
+|-----------|----------------|
+| Paper-only, fail-closed | `verify_paper_guard` refuses any non-SIMULATE environment and fails closed when the paper account id is missing (`tests/test_trade_guard.py`) |
+| Live tools unreachable | The 104-tool `mcp__moomoo__*` surface is pinned in `app/agents/moomoo_tools.json`; live namespaces are denied by prefix (`app/agents/policy.py`) |
+| Risk decisions are executable, not prose | Pure-function risk gate returns PASS/REJECT with one reason code per breach (`app/services/risk_gate.py`) |
+| Ledger writes first | The order route fails closed if the decision ledger is unavailable (`test_a08_ledger_unavailable_fails_closed`) |
+| One order per decision | Redis `NX` idempotency key (24 h); decision id is stamped into the broker order `remark` |
+| Tamper-evident audit trail | Append-only JSONL journal with `seq/prev_hash/hash`; `GET /api/agents/journal/verify` → `hash_chain_ok` |
+| Decision ↔ broker parity | `GET /api/agents/reconciliation` reports `matched`, `missing_at_broker`, `untracked_at_ledger` |
 
-Stage 2 — XGBoost Classifier (supervised)
-  Technical features + anomaly_score
-  TimeSeriesSplit CV (no data leakage)
-    → P(Up), P(Down)
-
-Stage 3 — LR Meta-Learner (calibrated stacker)
-  XGBoost probs + FinBERT sentiment + anomaly_score
-  CalibratedClassifierCV (Platt scaling)
-    → BUY / SELL / HOLD + confidence %
-```
-
-**Why this pipeline:**
-- Isolation Forest needs no anomaly labels — handles flash crashes and earnings surprises natively
-- XGBoost captures non-linear RSI × volume interactions; handles missing data
-- LR stacker takes calibrated probabilities as input (linear assumption holds); coefficients are interpretable for the portfolio README
-- FinBERT (ProsusAI/finbert) is pre-trained on 10-Ks and earnings calls — far more accurate than general BERT on financial headlines
-
-### Evaluation Targets
-
-| Metric | Target | Baseline |
-|--------|--------|----------|
-| Directional Accuracy | ≥ 60% | 50% (random walk) |
-| ROC-AUC | ≥ 0.65 | 0.50 |
-| Anomaly Precision | ≥ 70% | — |
-| Inference (cached) | ≤ 50ms | — |
-| Inference (cold) | ≤ 500ms | — |
+Full test-by-test proof: [`docs/PROOF.md`](docs/PROOF.md). Rollout gates, recon and strategy change log: [`docs/ROLLOUT.md`](docs/ROLLOUT.md).
 
 ---
 
-## Paper Trading & Ops
+## Agent Design
 
-Execution is **SIMULATE-only**. `MOOMOO_TRD_ENV` must stay `SIMULATE`; the account guard refuses live environments before any SDK call and fails closed when `MOOMOO_PAPER_ACCOUNT_ID` is missing.
+Seven roles share artifact contracts (`app/agents/artifacts.py`) and a single runtime (`app/agents/runtime.py`). The Supervisor runs health checks and triggers the pipeline; only the Executor holds a write capability, and only for paper orders.
 
-Every order is evaluated by a deterministic pre-trade risk gate (kill switch, notional, position cap, gross exposure, cash buffer, daily loss, drawdown, over-sell), then written to the decision ledger **before** the broker is called. Approved, rejected, dry-run, duplicate, and failed outcomes are all recorded.
+| Agent | Reads | Write capability | Output |
+|-------|-------|------------------|--------|
+| Supervisor | `quote_market_state`, `quote_trading_days`, `quote_stock_basicinfo`, `sim_trade_history_order_list` | none | `RunRecord` |
+| Data Steward | `quote_stock_quote`, `quote_history_kline`, `quote_cur_kline`, `quote_market_state`, `quote_trading_days` | none | `Dataset` |
+| Technical Analyst | `quote_history_kline`, `quote_cur_kline` | none | `TechnicalSignal` |
+| News Analyst | `news_search` | none | `SentimentSignal` |
+| Risk Reviewer | `sim_trade_account_list`, `sim_trade_cash_info`, `sim_trade_position_list`, `sim_trade_history_order_list` | none | `RiskVerdict` |
+| Executor | `sim_trade_account_list`, `sim_trade_position_list`, `sim_trade_history_order_list` | `place_paper_order` → `sim_trade_input_order`; `cancel_paper_order` → `sim_trade_cancel_order` | `ExecutionRecord` |
+| Auditor | `sim_trade_account_list`, `sim_trade_position_list`, `sim_trade_history_order_list` | none | `AuditReport` |
 
-| Method | Path | Purpose |
-|--------|------|---------|
+Artifact schemas fail closed: stale datasets become `deny_reason`, a veto requires non-empty reasons, a filled execution requires at least one fill, and confidence is clamped to `[0, 1]` with no logits field.
+
+No template may declare a write capability except the Executor, and `POST /api/agents/check-tool` lets any client ask the policy before calling a moomoo tool.
+
+---
+
+## Strategy
+
+The runtime combines three components with fixed weights:
+
+| Component | Weight | Notes |
+|-----------|--------|-------|
+| XGBoost | 0.5 | 3-class technical model, confidence empirically ≤ ~0.52 |
+| FinBERT | 0.3 | 0.0 when `NEWS_API_KEY` is unset (zero headlines) |
+| LSTM | 0.2 | 60-day sequence model |
+
+- **Gate:** net signal must exceed `CHALLENGE_SIGNAL_THRESHOLD` (0.30 under `s1.1`; was 0.60 under `s1.0`).
+- **Sizing:** 0.5 % of equity risked per trade; stop at `max(4 % of price, 2 × ATR)`.
+- **Order type:** LIMIT only, long only, no shorting, US-only universe.
+- **Universe:** `NVDA, AAPL, MSFT, AMD, GOOGL, META, AMZN, TSLA` (`CHALLENGE_UNIVERSE`).
+
+The 0.60 → 0.30 change is documented with its reason and evidence in `docs/ROLLOUT.md` → *Strategy change log*.
+
+---
+
+## Risk Controls
+
+| Limit | Default env var | Default |
+|-------|-----------------|---------|
+| Max position | `RISK_MAX_POSITION_PCT` | 25 % of equity |
+| Max gross exposure | `RISK_MAX_GROSS_EXPOSURE_PCT` | 90 % |
+| Max order notional | `RISK_MAX_ORDER_NOTIONAL` | 50,000 |
+| Max daily loss | `RISK_MAX_DAILY_LOSS_PCT` | 3 % |
+| Max drawdown | `RISK_MAX_DRAWDOWN_PCT` | 15 % |
+| Min cash buffer | `RISK_MIN_CASH_BUFFER_PCT` | 10 % |
+| Max open positions | `RISK_MAX_OPEN_POSITIONS` | 5 |
+| Quote freshness (buys) | `RISK_MAX_QUOTE_AGE_S` | 60 s |
+| Limit-orders-only | `RISK_LIMIT_ORDERS_ONLY` | true |
+| US-only universe | `RISK_US_ONLY` | true |
+
+Reason codes returned by the gate: `KILL_SWITCH_ACTIVE`, `MARKET_ORDER_FORBIDDEN`, `QUOTE_TIMESTAMP_MISSING`, `STALE_QUOTE`, `UNIVERSE_NOT_TRADABLE`, `ORDER_NOTIONAL_EXCEEDED`, `POSITION_LIMIT_EXCEEDED`, `GROSS_EXPOSURE_EXCEEDED`, `INSUFFICIENT_CASH`, `CASH_BUFFER_BREACHED`, `DAILY_LOSS_LIMIT_BREACHED`, `MAX_DRAWDOWN_BREACHED`, `MAX_OPEN_POSITIONS_EXCEEDED`, `POSITION_NOT_HELD`.
+
+Policy codes: `UNKNOWN_AGENT`, `NOT_IN_ALLOWLIST`, `LIVE_TOOL_DENIED`.
+
+The kill switch blocks new buys and still allows flattening sells. A session halts with zero orders on a failed health check, a stale quote, or an entitlement-denied symbol.
+
+---
+
+## Evidence So Far
+
+The s1.1 window runs one paper session per US trading day; sessions run so far:
+
+| Date | Run | Order | Fill | Reconciliation |
+|------|-----|-------|------|----------------|
+| 2026-11-19 | `run-2026-11-19-paper-2904c7d8` | NVDA BUY 230 @ 150.96 LIMIT (`3117694`) | FILLED_ALL, 230 @ 150.93 | matched 2 / ledger 2 / broker 2 / breaks [] / ok |
+| 2026-11-20 | `run-2026-11-20-paper-ee416fa9` | NVDA BUY 237 @ 139.09 LIMIT (`3120535`); TSLA rejected at submission | FILLED_ALL, 237 @ 139.04 | matched 3 / ledger 3 / broker 3 / breaks [] / ok |
+
+- Journal chain verified after both sessions (`/api/agents/journal/verify` → `hash_chain_ok: true`).
+- Duplicate execution of the same `(session_date, phase)` returns `reused: true` with zero executions.
+- Shadow runs place zero orders (`test_five_shadow_sessions_produce_zero_orders`).
+
+### What failed, and why
+
+- **The s1.0 ten-session window (run on 2026-11-19) was structurally trade-free.** No loader-native model artifacts existed for the universe and `NEWS_API_KEY` was unset, so the net ensemble capped near 0.42 against a 0.60 gate. Fixed by `scripts/train_agent_models.py` provisioning `{TICKER}_xgb.pkl`, `{TICKER}_lstm.pt` and `{TICKER}_lstm_scaler.pkl` for all eight names, plus the documented gate change to 0.30 / `s1.1`.
+- **TSLA (2026-11-20) cleared the gate but was rejected at submission.** moomoo refused a three-decimal limit price (369.125); no order exists, and the run records a failed execution in its audit. The fix is price rounding to the market's tick size — tracked, not yet applied.
+- **Ledger terminal state is a known gap.** The ledger records `submitted`; terminal fill state is read from `sim_trade_history_order_list` during reconciliation. See *Open gaps* in [`docs/PROOF.md`](docs/PROOF.md).
+
+---
+
+## Reproduce
+
+### Prerequisites
+
+- Python 3.11+ and `stocksense-ai/backend/.venv`
+- Node.js 20+ (dashboard)
+- moomoo OpenD gateway on `127.0.0.1:11111` (market data; the loop also runs against the in-process demo broker with `DEMO_MODE=true`)
+- Redis (or Docker)
+
+```bash
+cd stocksense-ai/backend
+python -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+cp .env.example .env        # set SECRET_KEY, ADMIN_API_TOKEN, MOOMOO_PAPER_ACCOUNT_ID
+```
+
+### Run the proofs
+
+```bash
+cd stocksense-ai/backend
+.venv/bin/python -m pytest -q
+```
+
+### Full stack via Docker
+
+```bash
+cp stocksense-ai/backend/.env.example stocksense-ai/backend/.env
+docker compose up --build   # Redis, Postgres, ClickHouse, backend :8000, frontend :3000
+```
+
+Docker covers the read-only surfaces. Paper sessions still need a local OpenD gateway (or `DEMO_MODE=true`) and the SIMULATE account id.
+
+### Run agent sessions
+
+```bash
+cd stocksense-ai/backend
+
+# shadow: decisions logged, zero order tools called
+.venv/bin/python -m app.agents.shadow --sessions 5
+
+# paper: risk gate + Executor against SIMULATE (or the demo broker when DEMO_MODE=true)
+.venv/bin/python -m app.agents.shadow --sessions 1 --phase paper --symbols AAPL,NVDA
+```
+
+### Inspect the audit trail
+
+```bash
+curl -s localhost:8000/api/agents/runs            | jq '.runs[0]'
+curl -s localhost:8000/api/agents/journal/verify  | jq
+curl -s localhost:8000/api/agents/reconciliation  | jq
+curl -s localhost:8000/api/agents/policy          | jq '.manifest_sha256'
+```
+
+Pin the policy `manifest_sha256` before a challenge run; it changes whenever a template allowlist changes.
+
+### Dashboard
+
+```bash
+cd stocksense-ai/frontend
+npm install && npm run dev    # localhost:3000
+```
+
+---
+
+## Market Data
+
+The fetch chain in `app/data/fetcher.py` is:
+
+1. Redis (`dataset:{TICKER}:{period}y`, 15 min)
+2. ClickHouse OHLCV, when fresh
+3. **Local moomoo K-line snapshot** (`MOOMOO_KLINE_CACHE_FIRST=1` puts this ahead of OpenD)
+4. Live moomoo OpenD K-lines
+5. Local snapshot again (stale-guarded)
+6. yfinance fallback
+
+The hosted moomoo MCP gateway was probed on 2026-11-19: US quotes and daily K-lines return `ret_code=0`; `SG.D05` returns `-9` (realtime quote permission required) and `MY.1155` returns `-8` (market not supported). **The universe is US-only by entitlement**, which the Data Steward encodes as `deny_reason` instead of fabricating data.
+
+Market-data views also cover Bursa Malaysia (`/dashboard/bursa`, yfinance symbols such as `MAYBANK.KL`), but the paper-trading universe stays US-only.
+
+### Read-only K-line cache
+
+`scripts/cache_moomoo_klines.py` pulls daily bars through the quote gateway only — it imports no trade context, so no order, cancel, transfer or subscription endpoint is reachable.
+
+```bash
+cd stocksense-ai/backend
+
+# Pull via OpenD (US.NVDA, US.AAPL)
+.venv/bin/python scripts/cache_moomoo_klines.py --tickers NVDA,AAPL --bars 370
+
+# Or import raw output from the moomoo MCP quote_cur_kline tool
+.venv/bin/python scripts/cache_moomoo_klines.py --from-json nvda.json --ticker NVDA
+```
+
+Snapshots are JSON with a schema version, `fetched_at` freshness guard and atomic writes under `data/cache/moomoo/` (gitignored).
+
+| Env var | Default | Purpose |
+|---------|---------|---------|
+| `MOOMOO_KLINE_CACHE_DIR` | `backend/data/cache/moomoo` | Snapshot directory |
+| `MOOMOO_KLINE_CACHE_MAX_AGE_H` | `72` | Ignore snapshots older than this |
+| `MOOMOO_KLINE_CACHE_FIRST` | unset | `1`/`true` prefers snapshots over live OpenD |
+
+---
+
+## API Reference
+
+### Agent operations (paper/SIMULATE)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/agents` | Seven templates, tool bindings, manifest SHA-256 |
+| GET | `/api/agents/policy` | Deny prefixes and per-agent allowlists |
+| GET | `/api/agents/{agent_id}` | Full template: contract, prompt, artifacts |
+| POST | `/api/agents/check-tool` | `{"agent_id","tool"}` → `{allowed, code}` |
+| POST | `/api/agents/run` | Run one shadow/paper session (`X-Admin-Token`) |
+| GET | `/api/agents/runs` | Recent sessions from the journal |
+| GET | `/api/agents/runs/{run_id}` | Full event stream |
+| GET | `/api/agents/journal/verify` | Verify the hash chain |
+| GET | `/api/agents/reconciliation` | Ledger executions vs broker paper orders |
+
+### Trading and portfolio
+
+| Method | Path | Description |
+|--------|------|-------------|
 | GET | `/api/trading/account` | Guard status + paper account snapshot |
 | GET | `/api/trading/positions` | Open paper positions |
 | GET | `/api/trading/decisions` | Decision/execution ledger (`limit`, `ticker`) |
 | POST | `/api/trading/orders` | Risk-gated order submission (`dry_run` supported) |
 | GET/POST | `/api/risk/kill-switch` | Read / trip the kill switch (POST needs `X-Admin-Token`) |
 | GET | `/api/portfolio/summary` | P&L, exposure, ledger counts; records an equity snapshot |
-| GET | `/api/portfolio/equity-curve` | Snapshot time series for the equity chart |
+| GET | `/api/portfolio/equity-curve` | Snapshot time series |
 | GET | `/api/portfolio/rejected` | Rejected orders with reason codes |
 
-The ops UI lives at `/dashboard/ops` (Recharts equity curve, positions, rejected-order log). Equity snapshots persist to ClickHouse `stocksense.portfolio_snapshots`, with `data/portfolio_history.jsonl` as the local fallback.
+### Prediction and market data
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/predict/{ticker}` | Ensemble prediction |
+| GET | `/api/predict/batch/{tickers}` | Batch predictions (max 10) |
+| GET | `/api/stocks/{ticker}/realtime` | Real-time or fallback quote |
+| GET | `/api/stocks/{ticker}/ticks` | Tick-by-tick trades |
+| GET | `/api/stocks/{ticker}/orderbook` | Level 2 depth |
+| WS | `/ws/ticker/{ticker}` | Live price stream |
+| GET | `/health` | Health check: Redis, ClickHouse, broker guard |
 
 ---
 
-## Tech Stack
+## Dashboard and Clients
 
-| Layer | Technology |
-|-------|-----------|
-| Frontend | Next.js 15 (App Router) · TypeScript · Tailwind CSS · Framer Motion · Recharts |
-| Backend | FastAPI (Python 3.11) · APScheduler · SSE streaming |
-| ML | scikit-learn · XGBoost · PyTorch LSTM · HuggingFace FinBERT |
-| Experiment Tracking | MLflow |
-| Database | Supabase (PostgreSQL + pgvector) · RLS enabled |
-| Cache | Redis (TTL 300s predictions, 900s OHLCV) |
-| Auth | Supabase Auth + JWT |
-| MCP Server | `@modelcontextprotocol/sdk` — 6 Claude Code tools |
-| Frontend Deploy | AWS Amplify (free tier, SSR-native) |
-| Backend Deploy | AWS App Runner via ECR (~$25–40/month) |
-| CI/CD | GitHub Actions (lint → test → ECR push → App Runner deploy) |
-| Containers | Docker + Docker Compose |
+- `/dashboard` — prediction charts, the **Agent operations** panel (runs, journal integrity, reconciliation, break list)
+- `/dashboard/ops` — equity curve, positions, rejected-order log
+- `/dashboard/anomalies`, `/dashboard/sentiment`, `/dashboard/bursa` — model and market views
+- `mobile/` — Expo companion showing the same paper state; can submit a risk-gated paper order with a dry-run confirmation step
 
----
-
-## Architecture
-
-```
-┌──────────────────────────────────────────────┐
-│  Next.js 15 (AWS Amplify · ap-southeast-1)   │
-│  /dashboard  /anomalies  /sentiment          │
-│  SSE live stream · Framer Motion animations  │
-└─────────────────┬────────────────────────────┘
-                  │ REST + SSE
-                  ▼
-┌──────────────────────────────────────────────┐
-│  FastAPI (AWS App Runner · ap-southeast-1)   │
-│  ECR image · 1 vCPU · 2 GB RAM              │
-│  /api/predict   /api/anomalies               │
-│  /api/sentiment /api/stream  /api/train      │
-│  APScheduler → daily 9AM MYT ingestion       │
-└──────┬──────────┬──────────┬─────────────────┘
-       │          │          │
-  Supabase     Redis      MLflow
-  PostgreSQL   TTL cache  Experiment tracking
-  pgvector     Rate limit Model registry
-  RLS + Auth
-       │
-  yfinance · NewsAPI · Reddit PRAW · moomoo
-```
-
----
-
-## Repository Structure
-
-```
-stocksense-ai/
-├── stocksense-ai/
-│   ├── backend/               # Canonical FastAPI backend
-│   │   ├── app/
-│   │   │   ├── main.py        # FastAPI app + APScheduler
-│   │   │   ├── api/routes/    # predict, anomalies, sentiment, stream, train, health
-│   │   │   ├── core/          # config, redis_client, database (Supabase)
-│   │   │   ├── data/          # fetcher (yfinance + moomoo), 25 indicators
-│   │   │   ├── ml/            # LSTM + XGBoost predictor (original ensemble)
-│   │   │   └── services/      # 3-stage pipeline services + FinBERT + MLflow
-│   │   ├── ml/
-│   │   │   └── scripts/       # train.py, backfill.py, evaluate.py (CLI)
-│   │   ├── Dockerfile         # python:3.11-slim, HEALTHCHECK, port 8000
-│   │   └── requirements.txt
-│   ├── frontend/              # Next.js 15 App Router
-│   │   ├── amplify.yml        # AWS Amplify build spec
-│   │   └── src/
-│   │       ├── app/
-│   │       │   ├── page.tsx           # Landing (animated 3D neural net)
-│   │       │   └── dashboard/
-│   │       │       ├── page.tsx       # Main trading dashboard
-│   │       │       ├── anomalies/     # Isolation Forest history
-│   │       │       └── sentiment/     # FinBERT headlines feed
-│   │       ├── hooks/         # useAnomalies, useSentiment, useSSE, usePrediction
-│   │       ├── lib/           # api.ts, constants.ts, utils.ts
-│   │       └── types/         # stock.ts — all shared TypeScript interfaces
-│   ├── mcp-server/            # Claude Code MCP integration (6 tools)
-│   │   └── src/
-│   │       ├── index.ts       # stdio transport entry point
-│   │       ├── client.ts      # HTTP client → FastAPI
-│   │       └── tools/         # prediction, anomalies, retrain, sentiment, mlflow
-│   └── supabase/
-│       └── migrations/        # 001_predictions, 002_anomalies, 003_sentiment (RLS)
-├── backend/                   # Legacy backend (kept for reference)
-├── .github/
-│   └── workflows/
-│       ├── ci.yml             # Lint + type-check + test + Docker build
-│       ├── deploy.yml         # AWS Amplify + ECR → App Runner deploy on push to main
-│       └── ml-retrain.yml     # Weekly Monday 9AM MYT (matrix: NVDA/MAYBANK/PBBANK)
-├── docker-compose.yml         # Redis + FastAPI + MLflow + Next.js (local dev)
-├── .gitignore
-├── LICENSE
-└── README.md
-```
-
----
-
-## Quick Start
-
-### Prerequisites
-
-- Python 3.11+
-- Node.js 20+
-- Docker + Docker Compose (optional)
-- Redis (or use Docker)
-
-### Full Stack via Docker
-
-```bash
-git clone https://github.com/timothylee58/stocksense-ai.git
-cd stocksense-ai
-
-# Copy and fill env files
-cp stocksense-ai/backend/.env.example stocksense-ai/backend/.env
-cp stocksense-ai/frontend/.env.local.example stocksense-ai/frontend/.env.local
-
-docker-compose up --build
-```
-
-Services: FastAPI `localhost:8000` · Next.js `localhost:3000` · MLflow `localhost:5000`
-
-### Backend Only
-
-```bash
-cd stocksense-ai/backend
-python -m venv venv && source venv/bin/activate   # Windows: venv\Scripts\activate
-pip install -r requirements.txt
-uvicorn app.main:app --reload --port 8000
-```
-
-### Frontend Only
-
-```bash
-cd stocksense-ai/frontend
-npm install
-npm run dev   # localhost:3000
-```
+Charts use Recharts throughout.
 
 ---
 
@@ -218,32 +298,33 @@ npm run dev   # localhost:3000
 ### Backend (`stocksense-ai/backend/.env`)
 
 ```env
-# Supabase
-SUPABASE_URL=https://your-project.supabase.co
-SUPABASE_SERVICE_KEY=your-service-role-key
-
-# Redis
+# Core
 REDIS_URL=redis://localhost:6379
-
-# MLflow
-MLFLOW_TRACKING_URI=http://localhost:5000
-
-# News / Sentiment
-NEWS_API_KEY=your-newsapi-key
-REDDIT_CLIENT_ID=your-reddit-client-id
-REDDIT_CLIENT_SECRET=your-reddit-secret
-
-# Auth
 SECRET_KEY=run-openssl-rand-hex-32
 ADMIN_API_TOKEN=run-openssl-rand-hex-32
 
+# moomoo data
+MOOMOO_HOST=127.0.0.1
+MOOMOO_PORT=11111
+MOOMOO_ENABLED=true
+DEMO_MODE=false                 # true = in-process demo broker, never calls moomoo
+
 # Paper trading — SIMULATE only
-DEMO_MODE=false
 MOOMOO_TRADE_ENABLED=true
 MOOMOO_TRD_ENV=SIMULATE
 MOOMOO_PAPER_ACCOUNT_ID=from-challenge-dashboard
 MOOMOO_TRD_MARKET=US
 MOOMOO_SECURITY_FIRM=FUTUSECURITIES
+
+# Challenge loop
+CHALLENGE_UNIVERSE=["NVDA","AAPL","MSFT","AMD","GOOGL","META","AMZN","TSLA"]
+CHALLENGE_STRATEGY_VERSION=s1.1
+CHALLENGE_SIGNAL_THRESHOLD=0.30
+RISK_PER_TRADE_PCT=0.005
+RISK_MAX_OPEN_POSITIONS=5
+AGENT_JOURNAL_JSONL=data/agent_journal.jsonl
+DECISION_LEDGER_JSONL=data/decision_ledger.jsonl
+PORTFOLIO_HISTORY_JSONL=data/portfolio_history.jsonl
 
 # Risk limits
 RISK_MAX_POSITION_PCT=0.25
@@ -253,209 +334,144 @@ RISK_MAX_DAILY_LOSS_PCT=0.03
 RISK_MAX_DRAWDOWN_PCT=0.15
 RISK_MIN_CASH_BUFFER_PCT=0.10
 
-# Ledger / snapshot fallbacks
-DECISION_LEDGER_JSONL=data/decision_ledger.jsonl
-PORTFOLIO_HISTORY_JSONL=data/portfolio_history.jsonl
+# Read-only cloud demo
+READ_ONLY_MODE=false
 
-# ML
-ANOMALY_CONTAMINATION=0.08
-DIRECTION_THRESHOLD=0.60
-DEFAULT_TICKERS=["NVDA","MAYBANK.KL","PBBANK.KL"]
+# News / sentiment (FinBERT contributes 0 without a key)
+NEWS_API_KEY=
 
-# CORS
-ALLOWED_ORIGINS=["http://localhost:3000","https://main.your-app-id.amplifyapp.com"]
+# Optional
+SUPABASE_URL=
+SUPABASE_SERVICE_KEY=
+CLICKHOUSE_HOST=localhost
+CLICKHOUSE_PORT=8123
+ALLOWED_ORIGINS=["http://localhost:3000","http://localhost:8888"]
 ```
 
 ### Frontend (`stocksense-ai/frontend/.env.local`)
 
 ```env
-NEXT_PUBLIC_API_URL=https://your-service.ap-southeast-1.awsapprunner.com
-NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
+NEXT_PUBLIC_API_URL=http://localhost:8000
+NEXT_PUBLIC_SUPABASE_URL=
+NEXT_PUBLIC_SUPABASE_ANON_KEY=
 ```
 
 ---
 
-## ML Training
+## ML Pipeline
+
+The original three-stage pipeline still powers the prediction routes and the dashboard; the agent loop consumes the ensemble components directly.
+
+```
+Stage 1 — Isolation Forest (unsupervised)
+  OHLCV + 25 technical features → anomaly_score [-1, 1], is_anomaly
+
+Stage 2 — XGBoost Classifier (supervised)
+  Technical features + anomaly_score, TimeSeriesSplit CV → P(Up), P(Down)
+
+Stage 3 — LR meta-learner (calibrated stacker)
+  XGBoost probs + FinBERT sentiment + anomaly_score → BUY / SELL / HOLD + confidence
+```
+
+| Metric | Target | Baseline |
+|--------|--------|----------|
+| Directional accuracy | ≥ 60 % | 50 % |
+| ROC-AUC | ≥ 0.65 | 0.50 |
+| Anomaly precision | ≥ 70 % | — |
+| Inference (cached) | ≤ 50 ms | — |
+| Inference (cold) | ≤ 500 ms | — |
+
+Models are pre-trained artifacts and are **never** retrained at runtime. Provision them with:
 
 ```bash
 cd stocksense-ai/backend
-
-# Train all 3 stages for a ticker
-python ml/scripts/train.py --ticker NVDA --days 365
-
-# Backfill historical anomaly data into Supabase
-python ml/scripts/backfill.py --ticker NVDA --days 365
-
-# Walk-forward backtest evaluation
-python ml/scripts/evaluate.py --ticker NVDA
+.venv/bin/python ml/scripts/train.py --ticker NVDA --days 365      # 3-stage pipeline
+.venv/bin/python scripts/train_agent_models.py                    # loader-native agent artifacts
+.venv/bin/python scripts/validate_models.py                       # artifact check
 ```
 
-Models saved to `./models/` as:
-- `isolation_forest_NVDA.pkl` + `if_scaler_NVDA.pkl`
-- `xgb_NVDA.json`
-- `lr_meta_NVDA.pkl`
+Model artifacts: `isolation_forest_{T}.pkl`, `xgb_{T}.json`, `lr_meta_{T}.pkl` for the stacker, and `{T}_xgb.pkl`, `{T}_lstm.pt`, `{T}_lstm_scaler.pkl` for the agent loader.
 
 ---
 
-## Supabase Setup
+## Tech Stack
 
-Run migrations in order via Supabase SQL editor:
+| Layer | Technology |
+|-------|-----------|
+| Agent runtime | Python 3.11 · asyncio · artifact contracts · allowlist policy |
+| Backend | FastAPI · APScheduler · SSE · Pydantic Settings |
+| ML | scikit-learn · XGBoost · PyTorch LSTM · HuggingFace FinBERT |
+| Data | moomoo OpenD · pinned MCP tool inventory · yfinance fallback · Redis · ClickHouse |
+| Audit | Append-only JSONL journal (hash-chained) · decision ledger · broker reconciliation |
+| Frontend | Next.js 16 (App Router) · TypeScript · Tailwind CSS · Recharts · Framer Motion |
+| Mobile | Expo (React Native) |
+| MCP server | `@modelcontextprotocol/sdk` — 5 read-only tools (`stocksense-mcp`) |
+| Deploy | Vercel (frontend) · AWS App Runner via ECR (backend, read-only demo) |
+
+### Read-only MCP server
 
 ```bash
-supabase/migrations/001_predictions.sql   # predictions table + RLS
-supabase/migrations/002_anomalies.sql     # anomalies table + RLS
-supabase/migrations/003_sentiment.sql     # sentiment_scores table + RLS
+cd stocksense-ai/mcp-server && npm install && npm run build
 ```
+
+Tools: `get_prediction`, `get_anomalies`, `get_sentiment`, `compare_mlflow_runs`, `get_feature_importance`. None of them can place or cancel an order.
 
 ---
 
-## MCP Server (Claude Code Integration)
+## Repository Layout
 
-```bash
-cd stocksense-ai/mcp-server
-npm install && npm run build
 ```
-
-Add to Claude Code settings (`~/.claude/settings.json`):
-
-```json
-{
-  "mcpServers": {
-    "stocksense": {
-      "command": "node",
-      "args": ["path/to/stocksense-ai/mcp-server/dist/index.js"],
-      "env": { "STOCKSENSE_API_URL": "https://your-service.ap-southeast-1.awsapprunner.com" }
-    }
-  }
-}
+stocksense-ai/
+├── stocksense-ai/
+│   ├── backend/                    # Canonical FastAPI backend
+│   │   ├── app/
+│   │   │   ├── agents/             # 7 templates, policy, runtime, journal, reconciliation
+│   │   │   ├── api/routes/         # predict, stocks, agents, agent_run, trading, portfolio, …
+│   │   │   ├── core/               # config, redis, ClickHouse, stock codes
+│   │   │   ├── data/               # fetcher, moomoo_fetcher, local K-line cache
+│   │   │   ├── ml/                 # LSTM + XGBoost ensemble
+│   │   │   └── services/           # risk gate, ledger, portfolio, scheduler
+│   │   ├── scripts/                # train_agent_models, cache_moomoo_klines, ingest_news
+│   │   ├── tests/                  # A1–A16 acceptance, policy, runtime, read-only tests
+│   │   └── data/                   # journal, ledger, snapshots (gitignored)
+│   ├── frontend/                   # Next.js 16 dashboard
+│   ├── mcp-server/                 # Read-only MCP server (5 tools)
+│   └── supabase/migrations/
+├── mobile/                         # Expo paper-trading companion
+├── docs/
+│   ├── PROOF.md                    # Acceptance matrix A1–A16 + evidence
+│   └── ROLLOUT.md                  # Gates, recon, strategy change log, hard stops
+├── deploy/
+│   └── apprunner.env.example
+├── docker-compose.yml
+└── README.md
 ```
-
-**Available tools:**
-
-| Tool | Description |
-|------|-------------|
-| `get_prediction` | Full 3-stage ML prediction for a ticker |
-| `get_anomalies` | Isolation Forest anomaly history (up to 365 days) |
-| `get_sentiment` | FinBERT score + top headlines |
-| `trigger_retrain` | Kick off full pipeline retraining → MLflow run_id |
-| `compare_mlflow_runs` | Metric delta table between two runs |
-| `get_feature_importance` | XGBoost SHAP feature importance |
-
----
-
-## API Reference
-
-| Method | Path | Description |
-|--------|------|-------------|
-| `GET` | `/api/predict/{ticker}` | LSTM+XGBoost ensemble prediction |
-| `GET` | `/api/predict/batch/{tickers}` | Batch predictions (max 10, comma-separated) |
-| `GET` | `/api/anomalies/{ticker}?days=30` | Isolation Forest anomaly history |
-| `GET` | `/api/sentiment/{ticker}?hours=24` | FinBERT sentiment + headlines |
-| `GET` | `/api/stream/{ticker}` | SSE live prediction stream (30s interval) |
-| `POST` | `/api/train/{ticker}` | Trigger background model training |
-| `GET` | `/api/train/status/{ticker}` | Poll training progress |
-| `GET` | `/health` | Health check (Redis + Supabase status) |
-| `WS` | `/ws/ticker/{ticker}` | WebSocket live price stream |
-
----
-
-## CI/CD
-
-| Workflow | Trigger | Steps |
-|----------|---------|-------|
-| `ci.yml` | Push / PR to `main` | ESLint · TypeScript · Ruff · Docker build |
-| `deploy.yml` | Push to `main` | Amplify trigger · ECR push · App Runner deploy |
-| `ml-retrain.yml` | Monday 1AM UTC (9AM MYT) | Train IF + XGBoost for NVDA, MAYBANK.KL, PBBANK.KL |
 
 ---
 
 ## Deployment
 
-### Frontend → AWS Amplify
+The cloud deployment is a **read-only demo**. It serves predictions and dashboards but refuses `POST /api/trading/orders`, `POST /api/risk/kill-switch` and `POST /api/agents/run` with `READ_ONLY_MODE`. The container filesystem is ephemeral, so the audit chain resets on redeploy; challenge fills are produced by the local stack and recorded in [`docs/PROOF.md`](docs/PROOF.md).
 
-1. **Connect repo** in [AWS Amplify Console](https://console.aws.amazon.com/amplify/):
-   - New app → Host web app → GitHub → select `timothylee58/stocksense-ai`
-   - Branch: `main`
-   - App root: `stocksense-ai/frontend`
-   - Amplify auto-detects `amplify.yml`
+### Frontend → Vercel
 
-2. **Set environment variables** in Amplify Console → Environment variables:
-   ```
-   NEXT_PUBLIC_API_URL=https://your-service.ap-southeast-1.awsapprunner.com
-   NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
-   NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
-   ```
-
-3. Note the Amplify App ID (format: `d1234abcdef`) for GitHub secrets.
-
-4. Update `ALLOWED_ORIGINS` in backend `.env` with your Amplify domain (`https://main.{app-id}.amplifyapp.com`).
+- Root Directory: `stocksense-ai/frontend` (the repo has several apps; do not group them)
+- `NEXT_PUBLIC_API_URL` and `NEXT_PUBLIC_SUPABASE_*` are baked in at build time — redeploy after changes
+- `next.config.ts` fails the build when `NEXT_PUBLIC_API_URL` is missing, so a bundle cannot silently call `localhost`
 
 ### Backend → AWS App Runner (via ECR)
 
-1. **Create ECR repository:**
-   ```bash
-   aws ecr create-repository \
-     --repository-name stocksense/backend \
-     --region ap-southeast-1
-   ```
+1. Create the ECR repository `stocksense/backend` in `ap-southeast-1`.
+2. Publish model artifacts to S3 (they are gitignored), then set `MODELS_S3_URI` and optionally `DATA_S3_URI`; `deploy.yml` syncs them into the build context and aborts if `NVDA_xgb.pkl` / `NVDA_lstm.pt` are missing.
+3. Create the App Runner service on port `8000`, health check `/health`, 1 vCPU · 2 GB.
+4. Copy env keys from [`deploy/apprunner.env.example`](./deploy/apprunner.env.example) and set `READ_ONLY_MODE=true`, `MOOMOO_ENABLED=false`, `MOOMOO_TRADE_ENABLED=false`, `CLICKHOUSE_ENABLED=false`, a fresh `SECRET_KEY`, a separate `ADMIN_API_TOKEN`, and `ALLOWED_ORIGINS` with the Vercel domain.
 
-2. **Push initial image:**
-   ```bash
-   aws ecr get-login-password --region ap-southeast-1 | \
-     docker login --username AWS --password-stdin \
-     {account_id}.dkr.ecr.ap-southeast-1.amazonaws.com
+`deploy.yml` triggers on push to `master`; `ci.yml` runs lint, type-check, tests and a Docker build on every branch.
 
-   docker build -t stocksense/backend ./stocksense-ai/backend
-   docker tag stocksense/backend:latest \
-     {account_id}.dkr.ecr.ap-southeast-1.amazonaws.com/stocksense/backend:latest
-   docker push \
-     {account_id}.dkr.ecr.ap-southeast-1.amazonaws.com/stocksense/backend:latest
-   ```
+### Optional services
 
-3. **Create App Runner service** in [AWS App Runner Console](https://console.aws.amazon.com/apprunner/):
-   - Source: Container registry → Amazon ECR
-   - Image URI: `{account_id}.dkr.ecr.ap-southeast-1.amazonaws.com/stocksense/backend:latest`
-   - Port: `8000`
-   - Health check path: `/health`
-   - Instance: 1 vCPU · 2 GB
-   - Auto scaling: min 1 · max 5 instances
-   - Add all env vars from `.env.example`
-
-4. Note the Service ARN for GitHub secrets.
-
-### GitHub Actions Secrets Required
-
-```
-AWS_ACCESS_KEY_ID
-AWS_SECRET_ACCESS_KEY
-AMPLIFY_APP_ID
-APP_RUNNER_SERVICE_ARN
-NEXT_PUBLIC_API_URL
-NEXT_PUBLIC_SUPABASE_URL
-NEXT_PUBLIC_SUPABASE_ANON_KEY
-SUPABASE_URL
-SUPABASE_SERVICE_KEY
-MLFLOW_TRACKING_URI
-REDIS_URL
-SECRET_KEY
-```
-
-**IAM permissions for the deploy user** (least-privilege):
-```json
-{
-  "Version": "2012-10-17",
-  "Statement": [
-    { "Effect": "Allow", "Action": ["amplify:StartJob"], "Resource": "*" },
-    { "Effect": "Allow", "Action": ["ecr:GetAuthorizationToken"], "Resource": "*" },
-    { "Effect": "Allow", "Action": ["ecr:BatchCheckLayerAvailability", "ecr:InitiateLayerUpload",
-        "ecr:UploadLayerPart", "ecr:CompleteLayerUpload", "ecr:PutImage"],
-      "Resource": "arn:aws:ecr:ap-southeast-1:{account_id}:repository/stocksense/backend" },
-    { "Effect": "Allow", "Action": ["apprunner:StartDeployment"],
-      "Resource": "arn:aws:apprunner:ap-southeast-1:{account_id}:service/stocksense-backend/*" }
-  ]
-}
-```
+- **Supabase** — run `supabase/migrations/001_predictions.sql`, `002_anomalies.sql`, `003_sentiment.sql` in order (RLS enabled) for auth and prediction history. The paper-trading path does not require it.
+- **MLflow** — `MLFLOW_TRACKING_URI` for experiment tracking; the 3-stage training script logs there when reachable.
 
 ---
 
@@ -463,24 +479,23 @@ SECRET_KEY
 
 | Service | Cost |
 |---------|------|
-| AWS Amplify (frontend, SSR) | Free tier (generous) |
-| AWS App Runner 1 vCPU · 2 GB (backend) | ~$35–50/month |
-| Supabase Free (500MB DB, pgvector, 50k auth users) | $0 |
-| ECR storage (~500MB image) | ~$0.05/month |
-| **Total** | **~$35–50/month** |
+| Vercel Hobby (frontend) | $0 |
+| AWS App Runner 1 vCPU · 2 GB | ~$35–50/month |
+| Supabase Free | $0 |
+| ECR storage (~500 MB) | ~$0.05/month |
 
-> App Runner bills per active compute hour. Scale min instances to 0 (pause) when not demoing to cut costs to near zero.
+Pause the App Runner service between demos to cut cost to near zero.
 
 ---
 
-## Markets Covered
+## Known Gaps
 
-| Market | Tickers |
-|--------|---------|
-| NASDAQ | NVDA, AAPL, MSFT, AMZN, GOOGL, META, TSLA, JPM, V, WMT, XOM, NFLX, AMD, LLY, BRK-B |
-| Bursa Malaysia | MAYBANK.KL, PBBANK.KL |
+Tracked in [`docs/PROOF.md`](docs/PROOF.md) → *Open gaps vs PRD v0.2*:
 
-Malaysian market context is intentional — station names, MYR currency, and Bursa data are features, not bugs.
+- Ledger rows stay `submitted`; terminal fill state is reconciled from the broker.
+- `sim_trade_input_order` has no server-side idempotency; the decision-id `remark` plus read-before-retry is the mitigation.
+- Gross exposure (90 %), daily-loss stop (3 %) and intraday-only sessions differ from the PRD; they remain at their deployed defaults pending an explicit decision.
+- ClickHouse ledger/journal mirror is best-effort; JSONL is authoritative.
 
 ---
 
